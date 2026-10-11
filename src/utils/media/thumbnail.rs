@@ -26,7 +26,8 @@ use super::pdf::pdf_thumbnail;
 /// # Returns
 ///
 /// `Some(texture)` on success, `None` if the file is not visual media, if any
-/// required external tool (`ffmpeg`) is unavailable, or if I/O fails.
+/// required external tool (`ffmpeg`, `raw-thumbnailer`) is unavailable, or if
+/// I/O fails.
 pub async fn get_or_create_thumbnail(path: &std::path::Path) -> Option<gtk::gdk::Texture> {
     crate::hit!("get_or_create_thumbnail");
     let path = path.to_path_buf();
@@ -136,25 +137,36 @@ pub(crate) fn generate_thumbnail_sync(path: &std::path::Path) -> Option<gtk::gdk
             "mp3" | "flac" | "m4a" | "ogg" | "wav" | "aac" | "wma" | "opus"
         );
 
-    let (is_img, is_vid) = if !is_pdf_file && !is_font_file && !is_exe_file && !is_audio {
-        match ext.as_str() {
-            "jpg" | "jpeg" | "png" | "gif" | "webp" | "avif" | "heic" | "heif" | "bmp" | "tiff"
-            | "tif" | "jxl" | "svg" | "ico" => (true, false),
-            "mp4" | "mkv" | "webm" | "avi" | "mov" | "flv" | "wmv" | "m4v" | "mpg" | "mpeg"
-            | "ts" | "ogv" => (false, true),
-            _ => {
-                let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                let (ct, _) = adw::gio::content_type_guess(Some(filename.as_ref()), None);
-                (ct.starts_with("image/"), ct.starts_with("video/"))
+    // RAW files go through `raw-thumbnailer`, which extracts the camera's
+    // embedded JPEG preview instead of decoding sensor data. Classified as
+    // image so they honor `thumbnail_types.images` without a separate toggle.
+    let is_raw_file = !is_pdf_file
+        && !is_font_file
+        && !is_exe_file
+        && !is_audio
+        && crate::utils::media::is_raw_image_ext(&ext);
+
+    let (is_img, is_vid) =
+        if !is_pdf_file && !is_font_file && !is_exe_file && !is_audio && !is_raw_file {
+            match ext.as_str() {
+                "jpg" | "jpeg" | "png" | "gif" | "webp" | "avif" | "heic" | "heif" | "bmp"
+                | "tiff" | "tif" | "jxl" | "svg" | "ico" => (true, false),
+                "mp4" | "mkv" | "webm" | "avi" | "mov" | "flv" | "wmv" | "m4v" | "mpg" | "mpeg"
+                | "ts" | "ogv" => (false, true),
+                _ => {
+                    let filename = path.file_name().unwrap_or_default().to_string_lossy();
+                    let (ct, _) = adw::gio::content_type_guess(Some(filename.as_ref()), None);
+                    (ct.starts_with("image/"), ct.starts_with("video/"))
+                }
             }
-        }
-    } else {
-        (false, false)
-    };
+        } else {
+            (false, false)
+        };
 
     let is_supported = (is_pdf_file && thumb_types.pdfs)
         || (is_font_file && thumb_types.fonts)
         || (is_img && thumb_types.images)
+        || (is_raw_file && thumb_types.images)
         || (is_vid && thumb_types.videos)
         || (is_exe_file && thumb_types.executables)
         || (is_audio && thumb_types.audio);
@@ -201,6 +213,16 @@ pub(crate) fn generate_thumbnail_sync(path: &std::path::Path) -> Option<gtk::gdk
     }
 
     let _ = std::fs::create_dir_all(&cache_dir);
+
+    if is_raw_file {
+        // `raw-thumbnailer` writes PNG directly, no temp-file dance needed
+        // on the caller side. If the binary is missing, fall through to None
+        // and the grid shows the generic image icon.
+        if !crate::utils::media::raw_thumbnailer_available() {
+            return None;
+        }
+        return crate::utils::media::raw_thumbnail(path, &cache_path, &cache_dir, target_size);
+    }
 
     if is_img {
         return crate::utils::media::decode_image_thumbnail(

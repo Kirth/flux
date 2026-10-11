@@ -4,17 +4,58 @@ use std::path::Path;
 use std::process::Command;
 
 /// Logs a warning for each optional external binary not found in `$PATH`.
-pub fn check_optional_deps() {
-    for bin in ["ffmpeg", "ffprobe", "magick"] {
-        if Command::new("which")
-            .arg(bin)
-            .output()
-            .map(|o| !o.status.success())
-            .unwrap_or(true)
-        {
-            eprintln!("[flux] optional dependency '{bin}' not found in PATH");
-        }
+fn probe_bin(name: &str, hint: Option<&str>) {
+    if Command::new("which")
+        .arg(name)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    {
+        return;
     }
+
+    match hint {
+        Some(h) => eprintln!(
+            "[flux] {}",
+            crate::i18n::tr("optional dependency '{}' not found in PATH ({})")
+                .replacen("{}", name, 1)
+                .replacen("{}", h, 1)
+        ),
+        None => eprintln!(
+            "[flux] {}",
+            crate::i18n::tr("optional dependency '{}' not found in PATH").replacen("{}", name, 1)
+        ),
+    }
+}
+
+pub fn check_optional_deps() {
+    probe_bin("ffmpeg", None);
+    probe_bin("ffprobe", None);
+    probe_bin("magick", None);
+    probe_bin(
+        "raw-thumbnailer",
+        Some(&crate::i18n::tr(
+            "install raw-thumbnailer for RAW camera thumbnails",
+        )),
+    );
+    probe_bin(
+        "7z",
+        Some(&crate::i18n::tr(
+            "install p7zip-full on Debian/Ubuntu, p7zip elsewhere (AppImage icons)",
+        )),
+    );
+    probe_bin(
+        "wrestool",
+        Some(&crate::i18n::tr(
+            "install icoutils for .exe icon extraction",
+        )),
+    );
+    probe_bin(
+        "icotool",
+        Some(&crate::i18n::tr(
+            "install icoutils for .exe icon extraction",
+        )),
+    );
 
     check_gvfs_deps();
 }

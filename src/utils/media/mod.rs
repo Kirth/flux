@@ -7,6 +7,7 @@ mod image;
 mod mime;
 mod pdf;
 mod png;
+mod raw;
 mod thumbnail;
 mod video;
 
@@ -18,10 +19,12 @@ pub use format::{aspect_ratio_label, format_duration};
 pub use image::probe_image_dimensions;
 pub use mime::{
     container_mime_masks_extension, get_mime_type, guess_mime_from_extension, icon_gen_params,
-    is_appimage, is_audio_file, is_visual_media,
+    is_appimage, is_audio_file, is_raw_image_ext, is_visual_media,
 };
 #[allow(unused_imports)]
 pub use png::optimize_png_bytes;
+pub(crate) use raw::raw_thumbnail;
+pub use raw::raw_thumbnailer_available;
 pub use thumbnail::get_or_create_thumbnail;
 pub use video::probe_media_duration;
 

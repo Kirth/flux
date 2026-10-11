@@ -14,6 +14,14 @@ pub(super) fn is_visual_media_by_ext(path: &std::path::Path) -> (bool, bool) {
             "jpg" | "jpeg" | "png" | "gif" | "webp" | "avif" | "heic" | "heif" | "bmp" | "tiff"
             | "tif" | "jxl" | "svg" | "pdf" | "ttf" | "otf" | "woff" | "woff2" | "ttc" | "ico",
         ) => (true, false),
+        // RAW camera formats. Superset of what libopenraw handles, exiftool
+        // reads the container format directly, so false positives are harmless.
+        Some(
+            "cr2" | "cr3" | "crw" | "nef" | "nrw" | "arw" | "srf" | "sr2" | "dng" | "orf" | "rw2"
+            | "raf" | "pef" | "raw" | "rwl" | "x3f" | "3fr" | "fff" | "iiq" | "k25" | "kdc" | "mef"
+            | "mos" | "mrw" | "pxn" | "r3d" | "dcr" | "erf" | "cap" | "gpr" | "srw" | "ari" | "bay"
+            | "cs1" | "mfw" | "rdc" | "sti",
+        ) => (true, false),
         Some(
             "mp4" | "mkv" | "webm" | "avi" | "mov" | "flv" | "wmv" | "m4v" | "mpg" | "mpeg" | "ts"
             | "ogv",

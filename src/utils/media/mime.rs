@@ -162,17 +162,58 @@ pub fn is_visual_media(path: &Path) -> (bool, bool) {
             "jpg" | "jpeg" | "png" | "gif" | "webp" | "avif" | "heic" | "heif" | "bmp" | "tiff"
             | "tif" | "jxl" | "svg",
         ) => (true, false),
+        // RAW camera formats.
+        Some(
+            "cr2" | "cr3" | "nef" | "nrw" | "arw" | "srf" | "sr2" | "dng" | "orf" | "rw2" | "raf"
+            | "pef" | "raw" | "rwl" | "x3f" | "3fr" | "fff" | "iiq" | "k25" | "kdc" | "mef" | "mos"
+            | "mrw" | "pxn" | "r3d" | "dcr" | "erf" | "cap",
+        ) => (true, false),
         Some(
             "mp4" | "mkv" | "webm" | "avi" | "mov" | "flv" | "wmv" | "m4v" | "mpg" | "mpeg" | "ts"
             | "ogv",
         ) => (false, true),
-        // only hit GIO for unknown extensions
         _ => {
             let filename = path.file_name().unwrap_or_default().to_string_lossy();
             let (ct, _) = adw::gio::content_type_guess(Some(filename.as_ref()), None);
             (ct.starts_with("image/"), ct.starts_with("video/"))
         }
     }
+}
+
+/// Returns `true` when `ext` is a RAW camera format handled by
+/// `raw-thumbnailer`.
+pub fn is_raw_image_ext(ext: &str) -> bool {
+    matches!(
+        ext.to_ascii_lowercase().as_str(),
+        "cr2"
+            | "cr3"
+            | "nef"
+            | "nrw"
+            | "arw"
+            | "srf"
+            | "sr2"
+            | "dng"
+            | "orf"
+            | "rw2"
+            | "raf"
+            | "pef"
+            | "raw"
+            | "rwl"
+            | "x3f"
+            | "3fr"
+            | "fff"
+            | "iiq"
+            | "k25"
+            | "kdc"
+            | "mef"
+            | "mos"
+            | "mrw"
+            | "pxn"
+            | "r3d"
+            | "dcr"
+            | "erf"
+            | "cap"
+    )
 }
 
 pub fn is_audio_file(path: &Path) -> bool {

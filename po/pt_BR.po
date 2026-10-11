@@ -2826,6 +2826,30 @@ msgid "Tag removed"
 msgstr "Etiqueta removida"
 
 # ============================================================
+# src/utils/deps.rs
+# ============================================================
+
+#: src/utils/deps.rs:???
+msgid "optional dependency '{}' not found in PATH"
+msgstr "dependência opcional '{}' não encontrada no PATH"
+
+#: src/utils/deps.rs:???
+msgid "optional dependency '{}' not found in PATH ({})"
+msgstr "dependência opcional '{}' não encontrada no PATH ({})"
+
+#: src/utils/deps.rs:???
+msgid "install raw-thumbnailer for RAW camera thumbnails"
+msgstr "instale raw-thumbnailer para miniaturas de câmeras RAW"
+
+#: src/utils/deps.rs:???
+msgid "install p7zip-full on Debian/Ubuntu, p7zip elsewhere (AppImage icons)"
+msgstr "instale p7zip-full no Debian/Ubuntu, p7zip em outros sistemas (ícones de AppImage)"
+
+#: src/utils/deps.rs:???
+msgid "install icoutils for .exe icon extraction"
+msgstr "instale icoutils para extração de ícones de .exe"
+
+# ============================================================
 # sem referência mapeada
 # ============================================================
 
