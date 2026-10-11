@@ -129,12 +129,24 @@ impl FluxApp {
                 if let Some(path) = file.path() {
                     match event {
                         gio::FileMonitorEvent::Deleted | gio::FileMonitorEvent::MovedOut => {
+                            // Deletions are terminal, dispatch immediately.
                             sender_clone.input(AppMsg::FileDeleted(path));
+                        }
+                        gio::FileMonitorEvent::ChangesDoneHint => {
+                            // Writer closed the file after a batch of writes. This
+                            // is the signal we trust, dispatch without debouncing.
+                            sender_clone.input(AppMsg::FileChanged(path));
                         }
                         gio::FileMonitorEvent::Created
                         | gio::FileMonitorEvent::MovedIn
-                        | gio::FileMonitorEvent::ChangesDoneHint => {
-                            sender_clone.input(AppMsg::FileChanged(path));
+                        | gio::FileMonitorEvent::Changed => {
+                            // Writers that do not emit ChangesDoneHint (some editors,
+                            // some network backends) fall back to a debounced Changed
+                            // dispatch. Coalesces the write-flush burst that a 30 MB
+                            // download emits into a single FileChanged after the file
+                            // has stopped growing, so the thumbnail pipeline never runs
+                            // against a truncated source.
+                            crate::ui::ops::debounce_path_event(path, sender_clone.clone());
                         }
                         gio::FileMonitorEvent::Moved | gio::FileMonitorEvent::Renamed => {
                             sender_clone.input(AppMsg::FileDeleted(path));

@@ -1,6 +1,6 @@
 //! `FluxApp` operation handlers, grouped by domain.
 //!
-//! Most modules only add `handle_*` methods to `FluxApp`; `paste` also exposes
+//! Most modules only add `handle_*` methods to `FluxApp`, `paste` also exposes
 //! the shared task-id counter and `perform_file_op`.
 
 pub mod paste;
@@ -17,3 +17,5 @@ mod toast;
 mod undo;
 mod view;
 mod watcher;
+
+pub(crate) use watcher::debounce_path_event;

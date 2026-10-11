@@ -13,6 +13,7 @@ impl FluxApp {
         tab_index: usize,
         sender: AsyncComponentSender<Self>,
     ) {
+        crate::hit!("spawn_thumbnail_loader");
         let session_arc = self.load_id.clone();
 
         if media_tasks.is_empty() {
