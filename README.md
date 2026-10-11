@@ -298,7 +298,7 @@ Flux requires GTK4, Libadwaita, and system media/icon utilities. A **Nerd Font**
 
 ```bash
 sudo apt install libadwaita-1-dev libgtk-4-dev libpango1.0-dev libgraphene-1.0-dev \
-  libcairo2-dev libgdk-pixbuf-2.0-dev libpoppler-glib-dev ffmpeg imagemagick icoutils
+  libcairo2-dev libgdk-pixbuf-2.0-dev libpoppler-glib-dev ffmpeg imagemagick icoutils p7zip-full
 ```
 
 > _Note:_ Debian/Ubuntu repositories do not package standalone Nerd Fonts by default. Install the symbol glyphs with:
@@ -320,14 +320,14 @@ or for manual install
 
 ```bash
 sudo pacman -S libadwaita gtk4 glib2 pango graphene cairo gdk-pixbuf2 poppler-glib \
-  ffmpeg imagemagick icoutils ttf-nerd-fonts-symbols
+  ffmpeg imagemagick icoutils ttf-nerd-fonts-symbols p7zip
 ```
 
 **Fedora**
 
 ```bash
 sudo dnf install libadwaita-devel gtk4-devel pango-devel graphene-devel cairo-devel \
-  gdk-pixbuf2-devel poppler-glib-devel ffmpeg ImageMagick icoutils
+  gdk-pixbuf2-devel poppler-glib-devel ffmpeg ImageMagick icoutils p7zip
 ```
 
 > _Note:_ To install the symbol glyphs on Fedora:

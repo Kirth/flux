@@ -150,6 +150,14 @@ pub fn get_icon_for_path_with_override(
         }
     }
 
+    if ext.eq_ignore_ascii_case("AppImage") && crate::utils::media::seven_zip_available() {
+        if let Some(icon_path) = crate::utils::media::extract_appimage_icon(path) {
+            if let Ok(icon) = gio::Icon::for_string(&icon_path.to_string_lossy()) {
+                return icon;
+            }
+        }
+    }
+
     // ── MIME resolution ─────────────────────────────────────────────────────
     let content_type = if let Some(mime) = crate::utils::media::guess_mime_from_extension(&filename)
     {

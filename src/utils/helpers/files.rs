@@ -44,6 +44,42 @@ impl FluxApp {
             .unwrap_or(false)
     }
 
+    /// Launches an AppImage as a native executable.
+    ///
+    /// If the file lacks the owner-execute bit, which is what downloaded
+    /// AppImages usually have, we set it silently and spawn. This matches the
+    /// macOS `.app` bundle behavior that AppImage is explicitly imitating:
+    /// double-click runs the app, no confirmation dialog. On Linux this is a
+    /// deliberate departure from file managers convention of prompting
+    /// on first run, the reasoning is that an AppImage is understood by users
+    /// to be a runnable artifact, and the prompt adds friction without
+    /// meaningful protection (the user already chose to double-click it).
+    ///
+    /// The chmod is owner-only (`0o100`), never touches group/other bits,
+    /// setuid, setgid, or ACLs, and is trivially reversible with `chmod -x`.
+    fn launch_appimage(path: &Path) -> std::io::Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+
+        // Ensure the owner-execute bit is set. AppImages downloaded via a browser
+        // usually arrive mode 0644, which is why double-clicking them in other
+        // file managers historically does nothing.
+        let meta = std::fs::metadata(path)?;
+        let mut perms = meta.permissions();
+        let mode = perms.mode();
+        if mode & 0o100 == 0 {
+            perms.set_mode(mode | 0o100);
+            std::fs::set_permissions(path, perms)?;
+            eprintln!("[appimage] granted +x to {}", path.display());
+        }
+
+        let workdir = path.parent().unwrap_or_else(|| Path::new("/"));
+
+        std::process::Command::new(path)
+            .current_dir(workdir)
+            .spawn()
+            .map(|_| ())
+    }
+
     /// Dispatches the correct action for each `(path, is_dir)` item pair.
     ///
     /// Centralises the routing logic shared by `AppMsg::Open` and `AppMsg::Activate`
@@ -128,13 +164,19 @@ impl FluxApp {
                 sender.input(AppMsg::EnterArchive(path));
                 break;
             }
-            // LUKS encrypted image file or standard file opening offloaded to background worker
+            // LUKS encrypted image, AppImage, .desktop entry, or standard file open
             else {
                 let sender_clone = sender.clone();
                 let path_clone = path.clone();
                 relm4::spawn_blocking(move || {
                     if crate::services::luks::is_luks_image(&path_clone) {
                         sender_clone.input(AppMsg::UnlockLuksImage { path: path_clone });
+                    } else if crate::utils::media::is_appimage(&path_clone) {
+                        if let Err(e) = Self::launch_appimage(&path_clone) {
+                            let msg =
+                                tr("Failed to launch AppImage: {}").replace("{}", &e.to_string());
+                            sender_clone.input(AppMsg::ShowToast(msg));
+                        }
                     } else if path_clone.extension().and_then(|e| e.to_str()) == Some("desktop") {
                         if let Some(desktop_app) =
                             gio_unix::DesktopAppInfo::from_filename(&path_clone)

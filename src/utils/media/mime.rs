@@ -57,6 +57,25 @@ pub fn container_mime_masks_extension(ext: &str, content_type: &str) -> bool {
     !ext_is_subtype
 }
 
+pub fn is_appimage(path: &Path) -> bool {
+    let has_ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("appimage"));
+
+    // ELF magic: 0x7F 'E' 'L' 'F'
+    let is_elf = {
+        use std::io::Read;
+        let mut magic = [0u8; 4];
+        std::fs::File::open(path)
+            .and_then(|mut f| f.read_exact(&mut magic))
+            .map(|_| magic == [0x7F, b'E', b'L', b'F'])
+            .unwrap_or(false)
+    };
+
+    has_ext && is_elf
+}
+
 pub fn icon_gen_params() -> (bool, String, String, String, f64) {
     let icon_cfg = crate::utils::config::get_icon_config();
     let (_, _, auto_gen, accent, body, font, font_size) = &*icon_cfg;
