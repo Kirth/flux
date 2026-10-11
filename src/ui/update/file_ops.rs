@@ -71,14 +71,8 @@ pub(super) fn handle(
         AppMsg::Undo => app.handle_undo(sender),
         AppMsg::Redo => app.handle_redo(sender),
         AppMsg::TrashSucceeded(paths) => {
-            for p in &paths {
-                if let Some(parent) = p.parent() {
-                    app.folder_cache.remove(&app.cache_key(parent));
-                }
-            }
-            app.folder_cache.remove(&app.cache_key(&app.current_path));
-            app.file_op_history
-                .push_undo(crate::ui::undo_redo::FileOp::Trash { paths });
+            app.purge_paths_from_all_tabs(&paths);
+            app.record_trash(paths, sender);
         }
         AppMsg::MoveSucceeded { items, dest_dir } => {
             app.folder_cache.remove(&app.cache_key(&dest_dir));
