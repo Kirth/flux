@@ -53,11 +53,18 @@ fn parse_size(s: &str) -> Option<u64> {
         .find(|c: char| !c.is_numeric() && c != '.')
         .unwrap_or(s.len());
 
-    if num_end == 0 || num_end == s.len() {
+    if num_end == 0 {
         return None;
     }
 
     let (num_part, unit_part) = s.split_at(num_end);
+
+    // Reject fractional byte counts: `>1.5MB` is ambiguous and the test
+    // suite requires `None` for it. Only whole numbers are accepted.
+    if num_part.contains('.') {
+        return None;
+    }
+
     let n: u64 = num_part.parse().ok()?;
 
     let unit_clean = unit_part.trim().to_lowercase();
@@ -66,12 +73,20 @@ fn parse_size(s: &str) -> Option<u64> {
         .or_else(|| unit_clean.strip_suffix('b'))
         .unwrap_or(&unit_clean);
 
-    let bytes = match unit {
-        "k" | "kb" => n.checked_mul(1024)?,
-        "m" | "mb" => n.checked_mul(1024 * 1024)?,
-        "g" | "gb" => n.checked_mul(1024 * 1024 * 1024)?,
-        "t" | "tb" => n.checked_mul(1024 * 1024 * 1024 * 1024)?,
+    // A size filter must specify a real unit. Bare numbers (`>10`) and
+    // explicit byte units (`>100B`) are rejected because they match
+    // essentially everything and can lock up the UI on large trees.
+    if unit.is_empty() {
+        return None;
+    }
+
+    let multiplier: u64 = match unit {
+        "k" => 1024,
+        "m" => 1024 * 1024,
+        "g" => 1024 * 1024 * 1024,
+        "t" => 1024 * 1024 * 1024 * 1024,
         _ => return None,
     };
-    Some(bytes)
+
+    n.checked_mul(multiplier)
 }
