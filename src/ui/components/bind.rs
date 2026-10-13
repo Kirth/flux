@@ -452,7 +452,11 @@ impl FileItem {
 
             widgets.stack.set_visible_child_name(constants::VIEW_ENTRY);
             entry.set_text(&self.name);
-            let dot_pos = self.name.rfind('.').unwrap_or(self.name.len());
+            let dot_pos = self
+                .name
+                .rfind('.')
+                .map(|byte_idx| self.name[..byte_idx].chars().count())
+                .unwrap_or_else(|| self.name.chars().count());
             entry.select_region(0, dot_pos as i32);
 
             gtk::glib::idle_add_local_once(clone!(
