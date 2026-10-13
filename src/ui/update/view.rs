@@ -7,7 +7,7 @@ pub(super) fn handle(
     sender: &AsyncComponentSender<FluxApp>,
 ) -> Result<(), AppMsg> {
     match msg {
-        AppMsg::SelectionChanged => app.handle_selection_changed(sender),
+        AppMsg::SelectionChanged { tab_id } => app.handle_selection_changed(tab_id, sender),
         AppMsg::ToggleListMode => app.handle_toggle_list_mode(),
         AppMsg::ToggleSortOrder => app.handle_toggle_sort_order(sender),
         AppMsg::CycleSort => app.handle_cycle_sort(sender),

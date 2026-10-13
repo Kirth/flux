@@ -39,7 +39,12 @@ pub(super) fn handle(
         AppMsg::ClearRecents => app.handle_clear_recents(sender),
         AppMsg::NewTab(target_path) => app.handle_new_tab(target_path, sender),
         AppMsg::OpenTabs(targets) => app.handle_open_tabs(targets, sender),
+        AppMsg::Open { position, tab_id } => app.handle_open(position, tab_id, sender),
         AppMsg::SwitchTab(index) => app.handle_switch_tab(index, sender),
+        AppMsg::TabReordered {
+            moved_id,
+            new_position,
+        } => app.handle_tab_reordered(moved_id, new_position),
         AppMsg::CloseTab(index_opt) => app.handle_close_tab(index_opt, sender),
         AppMsg::NextTab => app.handle_next_tab(),
         AppMsg::PrevTab => app.handle_prev_tab(),

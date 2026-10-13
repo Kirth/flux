@@ -298,7 +298,7 @@ impl FluxApp {
             );
         }
 
-        sender.input(AppMsg::SelectionChanged);
+        sender.input(AppMsg::SelectionChanged { tab_id: None });
     }
 
     pub fn handle_start_rename(&mut self, path: PathBuf) {

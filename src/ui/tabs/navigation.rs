@@ -33,16 +33,23 @@ impl FluxApp {
             .view
             .set_single_click_activate(self.config.ui.single_click);
 
+        let tab_id = tab.id;
+
         let s_open = sender.clone();
         tab.files.view.connect_activate(move |_, pos| {
-            s_open.input(AppMsg::Open(Some(pos)));
+            s_open.input(AppMsg::Open {
+                position: Some(pos),
+                tab_id: Some(tab_id),
+            });
         });
 
         let s_sel = sender.clone();
         if let Some(selection_model) = tab.files.view.model().and_downcast::<gtk::MultiSelection>()
         {
             selection_model.connect_selection_changed(move |_, _, _| {
-                s_sel.input(AppMsg::SelectionChanged);
+                s_sel.input(AppMsg::SelectionChanged {
+                    tab_id: Some(tab_id),
+                });
             });
         }
 

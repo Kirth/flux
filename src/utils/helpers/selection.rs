@@ -11,7 +11,13 @@ impl FluxApp {
     /// If a filter is active, it maps the visual selection indices back to the
     /// matching files. If no filter is active, it maps them directly.
     pub(crate) fn get_selection(&self) -> Vec<PathBuf> {
-        let active_files = match self.tabs.get(self.active_tab_index) {
+        self.get_selection_for_tab(self.active_tab_index)
+    }
+
+    /// Same as [`get_selection`], but resolves against an explicit tab index
+    /// instead of `self.active_tab_index`.
+    pub(crate) fn get_selection_for_tab(&self, tab_index: usize) -> Vec<PathBuf> {
+        let active_files = match self.tabs.get(tab_index) {
             Some(tab) => &tab.files,
             None => return Vec::new(),
         };
@@ -92,7 +98,13 @@ impl FluxApp {
     /// archive directories (whose paths are `archive://` URIs, never real
     /// filesystem paths) from regular files without issuing a syscall.
     pub(crate) fn get_selection_with_meta(&self) -> Vec<(PathBuf, bool)> {
-        let active_files = match self.tabs.get(self.active_tab_index) {
+        self.get_selection_with_meta_for_tab(self.active_tab_index)
+    }
+
+    /// Same as [`get_selection_with_meta`], but resolves against an explicit tab
+    /// index instead of `self.active_tab_index`.
+    pub(crate) fn get_selection_with_meta_for_tab(&self, tab_index: usize) -> Vec<(PathBuf, bool)> {
+        let active_files = match self.tabs.get(tab_index) {
             Some(tab) => &tab.files,
             None => return Vec::new(),
         };

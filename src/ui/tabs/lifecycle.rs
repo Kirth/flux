@@ -29,6 +29,9 @@ impl FluxApp {
         let title = new_tab.title.clone();
         let page = self.tab_view.append(&new_tab.scroller);
         page.set_title(&title);
+        unsafe {
+            page.set_data("flux_tab_id", tab_id);
+        }
 
         self.tabs.push(new_tab);
         self.active_tab_index = self.tabs.len() - 1;
@@ -66,6 +69,9 @@ impl FluxApp {
             let title = new_tab.title.clone();
             let page = self.tab_view.append(&new_tab.scroller);
             page.set_title(&title);
+            unsafe {
+                page.set_data("flux_tab_id", tab_id);
+            }
 
             self.tabs.push(new_tab);
 
@@ -221,5 +227,20 @@ impl FluxApp {
                 }
             }
         }
+    }
+
+    /// Restores the `self.tabs` / `tab_view` invariant after the user drags a
+    /// tab to a new position. `new_position` is the visual position emitted by
+    /// `AdwTabView::page-reordered`.
+    pub fn handle_tab_reordered(&mut self, moved_id: u64, new_position: usize) {
+        let Some(old_position) = self.tabs.iter().position(|t| t.id == moved_id) else {
+            return;
+        };
+        if old_position == new_position || new_position >= self.tabs.len() {
+            return;
+        }
+        let tab = self.tabs.remove(old_position);
+        self.tabs.insert(new_position, tab);
+        self.active_tab_index = new_position;
     }
 }

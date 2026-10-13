@@ -40,7 +40,7 @@ pub(super) fn handle(
         AppMsg::ShowTransferDialogIfActive(id) => app.handle_show_transfer_dialog_if_active(id),
         AppMsg::TransferDialogClosed => app.handle_transfer_dialog_closed(),
 
-        AppMsg::Open(position) => app.handle_open(position, sender),
+        AppMsg::Open { position, tab_id } => app.handle_open(position, tab_id, sender),
         AppMsg::Activate => app.handle_activate(sender),
         AppMsg::LaunchWithApp(app_id) => app.handle_launch_with_app(app_id),
         AppMsg::ExecuteCommand(cmd_template) => app.handle_execute_command(cmd_template, sender),

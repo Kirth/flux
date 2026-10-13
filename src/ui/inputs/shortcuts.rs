@@ -46,7 +46,13 @@ pub fn setup_global_shortcuts(
     bind_msg!(keymap.toggle_hidden.clone(), AppMsg::ToggleHidden);
     bind_msg!(keymap.delete.clone(), AppMsg::Delete);
     bind_msg!(keymap.properties.clone(), AppMsg::TriggerRenameSelection);
-    bind_msg!(keymap.open.clone(), AppMsg::Open(None));
+    bind_msg!(
+        keymap.open.clone(),
+        AppMsg::Open {
+            position: None,
+            tab_id: None,
+        }
+    );
     bind_msg!(keymap.root.clone(), AppMsg::Navigate(PathBuf::from("/")));
     bind_msg!(keymap.change_icon.clone(), AppMsg::TriggerIconPicker);
     bind_msg!(keymap.reset_icon.clone(), AppMsg::TriggerResetIcon);

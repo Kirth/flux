@@ -40,7 +40,7 @@ impl FluxApp {
             eprintln!("[cancel] pid=None");
         }
 
-        sender.input(AppMsg::SelectionChanged);
+        sender.input(AppMsg::SelectionChanged { tab_id: None });
     }
 
     pub fn handle_task_completed(&mut self, id: u64) {
@@ -60,7 +60,7 @@ impl FluxApp {
             }
         }
         self.task_queue.cancel_all();
-        sender.input(AppMsg::SelectionChanged);
+        sender.input(AppMsg::SelectionChanged { tab_id: None });
     }
 
     pub fn handle_task_queue_tick(&mut self, sender: &AsyncComponentSender<Self>) {
@@ -78,7 +78,7 @@ impl FluxApp {
             None => {
                 if self.selection_status.starts_with('[') {
                     self.selection_status = String::new();
-                    sender.input(AppMsg::SelectionChanged);
+                    sender.input(AppMsg::SelectionChanged { tab_id: None });
                 }
             }
         }

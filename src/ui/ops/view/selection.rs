@@ -9,11 +9,19 @@ use relm4::prelude::*;
 
 impl FluxApp {
     /// Updates grid selection metadata and formats the status bar label.
-    pub fn handle_selection_changed(&mut self, sender: &AsyncComponentSender<Self>) {
+    pub fn handle_selection_changed(
+        &mut self,
+        tab_id: Option<u64>,
+        sender: &AsyncComponentSender<Self>,
+    ) {
         crate::hit!("handle_selection_changed");
         if self.task_queue.summary().is_some() {
             return;
         }
+
+        let resolved_tab_idx = tab_id
+            .and_then(|id| self.tabs.iter().position(|t| t.id == id))
+            .unwrap_or(self.active_tab_index);
 
         let mut total_size = 0u64;
         let mut count = 0usize;
@@ -23,7 +31,7 @@ impl FluxApp {
         let mut single_name = String::new();
         let mut single_item: Option<crate::ui::FileItem> = None;
 
-        let active_files = match self.tabs.get(self.active_tab_index) {
+        let active_files = match self.tabs.get(resolved_tab_idx) {
             Some(t) => &t.files,
             None => return,
         };

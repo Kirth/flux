@@ -43,6 +43,10 @@ pub enum AppMsg {
     CloseTab(Option<usize>),
     /// Switches keyboard focus and display to the tab at the given index.
     SwitchTab(usize),
+    /// The user dragged a tab to a new position. `moved_id` is the stable
+    /// `TabState.id` of the moved tab, `new_position` is its new visual
+    /// position in the `adw::TabView`.
+    TabReordered { moved_id: u64, new_position: usize },
     /// Cycles to the next tab in sequential order.
     NextTab,
     /// Cycles to the previous tab in reverse sequential order.
@@ -482,7 +486,10 @@ pub enum AppMsg {
     /// Updates the startup window height.
     SetWindowHeight(i32),
     /// Signals that the file selection set in the main grid has changed.
-    SelectionChanged,
+    ///
+    /// `tab_id` is `Some` when emitted by a specific tab's selection model,
+    /// and `None` when emitted programmatically with no tab context.
+    SelectionChanged { tab_id: Option<u64> },
     /// Updates the single-click activation setting.
     SetSingleClick(bool),
     /// Updates the global hidden files visibility.
@@ -683,10 +690,17 @@ pub enum AppMsg {
     },
     /// Open all currently selected files or navigate to the selected directory.
     ///
-    /// `Some(position)` is supplied by `GridView::connect_activate` and addresses
-    /// the item directly without querying the selection model. `None` is used by
+    /// `position` is supplied by `GridView::connect_activate` and addresses the
+    /// item directly without querying the selection model. `None` is used by
     /// keyboard shortcuts and falls back to `get_selection_with_meta()`.
-    Open(Option<u32>),
+    ///
+    /// `tab_id` identifies the tab whose grid emitted the activation. It is
+    /// `Some` for widget-driven activations and `None` for global shortcuts,
+    /// which must operate on the currently active tab.
+    Open {
+        position: Option<u32>,
+        tab_id: Option<u64>,
+    },
     /// Delete all files within the system trash location.
     EmptyTrash,
     #[allow(dead_code)]

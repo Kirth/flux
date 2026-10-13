@@ -44,7 +44,12 @@ impl FluxApp {
     }
 
     /// Dispatches opening for a specific grid position or current multi-selection.
-    pub fn handle_open(&mut self, position: Option<u32>, sender: &AsyncComponentSender<Self>) {
+    pub fn handle_open(
+        &mut self,
+        position: Option<u32>,
+        tab_id: Option<u64>,
+        sender: &AsyncComponentSender<Self>,
+    ) {
         self.stop_video_preview();
 
         let modifiers = gdk::Display::default()
@@ -57,13 +62,11 @@ impl FluxApp {
             return;
         }
 
-        let is_selecting =
-            modifiers.intersects(gdk::ModifierType::CONTROL_MASK | gdk::ModifierType::SHIFT_MASK);
-        if is_selecting {
-            return;
-        }
+        let resolved_tab_idx = tab_id
+            .and_then(|id| self.tabs.iter().position(|t| t.id == id))
+            .unwrap_or(self.active_tab_index);
 
-        let active_files = match self.tabs.get(self.active_tab_index) {
+        let active_files = match self.tabs.get(resolved_tab_idx) {
             Some(tab) => &tab.files,
             None => return,
         };
@@ -163,7 +166,7 @@ impl FluxApp {
                 found.map(|f| vec![f]).unwrap_or_default()
             }
         } else {
-            self.get_selection_with_meta()
+            self.get_selection_with_meta_for_tab(resolved_tab_idx)
         };
 
         if items.is_empty() {

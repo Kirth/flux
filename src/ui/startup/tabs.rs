@@ -27,14 +27,21 @@ impl FluxApp {
         );
         initial_tab.is_initialized = true;
 
+        let tab_id = initial_tab.id;
+
         initial_tab
             .files
             .view
             .set_single_click_activate(config.ui.single_click);
+
         let s_open = sender.clone();
         initial_tab.files.view.connect_activate(move |_, pos| {
-            s_open.input(AppMsg::Open(Some(pos)));
+            s_open.input(AppMsg::Open {
+                position: Some(pos),
+                tab_id: Some(tab_id),
+            });
         });
+
         let s_sel = sender.clone();
         if let Some(selection_model) = initial_tab
             .files
@@ -43,7 +50,9 @@ impl FluxApp {
             .and_downcast::<gtk::MultiSelection>()
         {
             selection_model.connect_selection_changed(move |_, _, _| {
-                s_sel.input(AppMsg::SelectionChanged);
+                s_sel.input(AppMsg::SelectionChanged {
+                    tab_id: Some(tab_id),
+                });
             });
         }
 
@@ -51,6 +60,22 @@ impl FluxApp {
 
         let initial_page = tab_view.append(&initial_tab.scroller);
         initial_page.set_title(&initial_tab.title);
+        unsafe {
+            initial_page.set_data("flux_tab_id", tab_id);
+        }
+
+        let s_tab_reorder = sender.clone();
+        tab_view.connect_page_reordered(move |_tv, page, new_position| {
+            let moved_id: u64 = unsafe {
+                page.data::<u64>("flux_tab_id")
+                    .map(|r| *r.as_ref())
+                    .unwrap_or(0)
+            };
+            s_tab_reorder.input(AppMsg::TabReordered {
+                moved_id,
+                new_position: new_position as usize,
+            });
+        });
 
         let s_tab_select = sender.clone();
         tab_view.connect_selected_page_notify(move |tv| {
