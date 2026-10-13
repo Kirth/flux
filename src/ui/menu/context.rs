@@ -7,6 +7,62 @@ use gtk::gio;
 use relm4::prelude::*;
 use std::path::PathBuf;
 
+// ─── Builtin dispatch helpers ────────────────────────────────────────────────
+
+/// Registers a stateless `SimpleAction` on the window action group and returns
+/// the fully-qualified action name (`win.<name>`) plus the bare lookup name.
+///
+/// The closure receives the message sender and the resolved toast message,
+/// so every builtin does not have to repeat the same `clone` boilerplate.
+fn register_simple<F>(
+    group: &gio::SimpleActionGroup,
+    name: &'static str,
+    sender: &AsyncComponentSender<FluxApp>,
+    toast: Option<String>,
+    f: F,
+) -> (String, &'static str)
+where
+    F: Fn(&AsyncComponentSender<FluxApp>, Option<&str>) + 'static,
+{
+    let action = gio::SimpleAction::new(name, None);
+    let s = sender.clone();
+    action.connect_activate(move |_, _| {
+        f(&s, toast.as_deref());
+    });
+    group.add_action(&action);
+    (format!("win.{name}"), name)
+}
+
+/// Registers a `SimpleAction` that carries a single `PathBuf` target, plus an
+/// optional toast. Covers the majority of the builtins in the DSL.
+fn register_path_action<F>(
+    group: &gio::SimpleActionGroup,
+    name: &'static str,
+    sender: &AsyncComponentSender<FluxApp>,
+    target: PathBuf,
+    toast: Option<String>,
+    f: F,
+) -> (String, &'static str)
+where
+    F: Fn(&AsyncComponentSender<FluxApp>, PathBuf, Option<&str>) + 'static,
+{
+    let action = gio::SimpleAction::new(name, None);
+    let s = sender.clone();
+    action.connect_activate(move |_, _| {
+        f(&s, target.clone(), toast.as_deref());
+    });
+    group.add_action(&action);
+    (format!("win.{name}"), name)
+}
+
+/// Convenience: send a toast through the sender if the DSL entry supplied one.
+#[inline]
+fn emit_toast(sender: &AsyncComponentSender<FluxApp>, toast: Option<&str>) {
+    if let Some(msg) = toast {
+        sender.input(AppMsg::ShowToast(msg.to_string()));
+    }
+}
+
 impl FluxApp {
     /// Constructs and displays the context menu popover based on target path and MIME type.
     pub fn build_and_show_context_menu(
@@ -50,6 +106,7 @@ impl FluxApp {
                 })
             })
             .unwrap_or(0);
+
         let is_in_trash = self
             .current_path
             .to_string_lossy()
@@ -59,6 +116,10 @@ impl FluxApp {
 
         let mut submenu_map: indexmap::IndexMap<String, gio::Menu> = indexmap::IndexMap::new();
         let mut quick_list_transfer_item: Option<gio::MenuItem> = None;
+
+        // Clone the action group so the per-item closures below can register
+        // into it while the loop body still holds a borrow of `self`.
+        let action_group = self.action_group.clone();
 
         for action in &self.menu_actions {
             let mut matches = false;
@@ -227,10 +288,18 @@ impl FluxApp {
                     continue;
                 }
 
-                let (full_action_name, lookup_name) = match action.command.as_str() {
+                // Resolve the target path once, reused by all path-bearing builtins.
+                let target_path = resolved_path
+                    .clone()
+                    .unwrap_or_else(|| self.current_path.clone());
+
+                let reg = match action.command.as_str() {
+                    // ── Static action names, no per-invocation target ────────
                     "builtin::copy" => ("win.copy".to_string(), "copy"),
                     "builtin::cut" => ("win.cut".to_string(), "cut"),
                     "builtin::paste" => ("win.paste".to_string(), "paste"),
+
+                    // ── Selection-based, structurally different ───────────────
                     "builtin::open_new_tab" => {
                         let selected_dirs: Vec<PathBuf> = self
                             .get_selection_with_meta()
@@ -246,340 +315,263 @@ impl FluxApp {
                             vec![self.current_path.clone()]
                         };
 
-                        // Extract selection model to clear it upon activation
                         let selection_model = self
                             .tabs
                             .get(self.active_tab_index)
                             .and_then(|t| t.files.view.model())
                             .and_then(|m| m.downcast::<gtk::MultiSelection>().ok());
 
-                        let action = gio::SimpleAction::new("open-new-tab", None);
-                        let s = sender.clone();
-                        let toast = action_toast.clone();
-                        action.connect_activate(move |_, _| {
-                            if let Some(ref model) = selection_model {
-                                model.unselect_all();
-                            }
-                            s.input(AppMsg::OpenTabs(targets.clone()));
-                            if let Some(ref msg) = toast {
-                                s.input(AppMsg::ShowToast(msg.clone()));
-                            }
-                        });
-                        self.action_group.add_action(&action);
-                        ("win.open-new-tab".to_string(), "open-new-tab")
-                    }
-                    "builtin::rename" => {
-                        let action = gio::SimpleAction::new("rename-item", None);
-                        let s = sender.clone();
-                        let target = resolved_path.clone();
-                        let toast = action_toast.clone();
-                        action.connect_activate(move |_, _| {
-                            if let Some(ref p) = target {
-                                s.input(AppMsg::StartRename(p.clone()));
-                            }
-                            if let Some(ref msg) = toast {
-                                s.input(AppMsg::ShowToast(msg.clone()));
-                            }
-                        });
-                        self.action_group.add_action(&action);
-                        ("win.rename-item".to_string(), "rename-item")
-                    }
-                    "builtin::set_extension_icon" => {
-                        let ext_opt = resolved_path.as_ref().and_then(|p| {
-                            p.extension()
-                                .and_then(|e| e.to_str())
-                                .map(|s| s.to_string())
-                        });
-
-                        if let Some(ext_owned) = ext_opt {
-                            let set_ext_action = gio::SimpleAction::new("set-extension-icon", None);
-                            let sender_ic = sender.clone();
-                            let toast_clone = action_toast.clone();
-                            set_ext_action.connect_activate(move |_, _| {
-                                FluxApp::show_extension_icon_file_chooser(
-                                    ext_owned.clone(),
-                                    toast_clone.clone(),
-                                    sender_ic.clone(),
-                                );
-                            });
-                            self.action_group.add_action(&set_ext_action);
-                            ("win.set-extension-icon".to_string(), "set-extension-icon")
-                        } else {
-                            continue;
-                        }
-                    }
-                    "builtin::set_bg_window" => {
-                        let target = resolved_path
-                            .clone()
-                            .unwrap_or_else(|| self.current_path.clone());
-                        let action = gio::SimpleAction::new("set-bg-window", None);
-                        let s = sender.clone();
-                        let toast = action_toast.clone();
-                        action.connect_activate(move |_, _| {
-                            s.input(AppMsg::SetFluxBackground {
-                                target: target.clone(),
-                                slot: crate::model::BackgroundSlot::Window,
-                            });
-                            if let Some(ref msg) = toast {
-                                s.input(AppMsg::ShowToast(msg.clone()));
-                            }
-                        });
-                        self.action_group.add_action(&action);
-                        ("win.set-bg-window".to_string(), "set-bg-window")
-                    }
-                    "builtin::set_bg_sidebar_left" => {
-                        let target = resolved_path
-                            .clone()
-                            .unwrap_or_else(|| self.current_path.clone());
-                        let action = gio::SimpleAction::new("set-bg-sidebar-left", None);
-                        let s = sender.clone();
-                        let toast = action_toast.clone();
-                        action.connect_activate(move |_, _| {
-                            s.input(AppMsg::SetFluxBackground {
-                                target: target.clone(),
-                                slot: crate::model::BackgroundSlot::SidebarLeft,
-                            });
-                            if let Some(ref msg) = toast {
-                                s.input(AppMsg::ShowToast(msg.clone()));
-                            }
-                        });
-                        self.action_group.add_action(&action);
-                        ("win.set-bg-sidebar-left".to_string(), "set-bg-sidebar-left")
-                    }
-                    "builtin::set_bg_sidebar_right" => {
-                        let target = resolved_path
-                            .clone()
-                            .unwrap_or_else(|| self.current_path.clone());
-                        let action = gio::SimpleAction::new("set-bg-sidebar-right", None);
-                        let s = sender.clone();
-                        let toast = action_toast.clone();
-                        action.connect_activate(move |_, _| {
-                            s.input(AppMsg::SetFluxBackground {
-                                target: target.clone(),
-                                slot: crate::model::BackgroundSlot::SidebarRight,
-                            });
-                            if let Some(ref msg) = toast {
-                                s.input(AppMsg::ShowToast(msg.clone()));
-                            }
-                        });
-                        self.action_group.add_action(&action);
-                        (
-                            "win.set-bg-sidebar-right".to_string(),
-                            "set-bg-sidebar-right",
+                        register_simple(
+                            &action_group,
+                            "open-new-tab",
+                            sender,
+                            action_toast.clone(),
+                            move |s, toast| {
+                                if let Some(ref model) = selection_model {
+                                    model.unselect_all();
+                                }
+                                s.input(AppMsg::OpenTabs(targets.clone()));
+                                emit_toast(s, toast);
+                            },
                         )
                     }
-                    "builtin::clear_backgrounds" => {
-                        let action = gio::SimpleAction::new("clear-backgrounds", None);
-                        let s = sender.clone();
-                        let toast = action_toast.clone();
-                        action.connect_activate(move |_, _| {
+
+                    // ── Path-bearing builtins, uniform shape ──────────────────
+                    "builtin::rename" => register_path_action(
+                        &action_group,
+                        "rename-item",
+                        sender,
+                        target_path,
+                        action_toast.clone(),
+                        |s, target, toast| {
+                            s.input(AppMsg::StartRename(target));
+                            emit_toast(s, toast);
+                        },
+                    ),
+                    "builtin::set_bg_window" => register_path_action(
+                        &action_group,
+                        "set-bg-window",
+                        sender,
+                        target_path,
+                        action_toast.clone(),
+                        |s, target, toast| {
+                            s.input(AppMsg::SetFluxBackground {
+                                target,
+                                slot: crate::model::BackgroundSlot::Window,
+                            });
+                            emit_toast(s, toast);
+                        },
+                    ),
+                    "builtin::set_bg_sidebar_left" => register_path_action(
+                        &action_group,
+                        "set-bg-sidebar-left",
+                        sender,
+                        target_path,
+                        action_toast.clone(),
+                        |s, target, toast| {
+                            s.input(AppMsg::SetFluxBackground {
+                                target,
+                                slot: crate::model::BackgroundSlot::SidebarLeft,
+                            });
+                            emit_toast(s, toast);
+                        },
+                    ),
+                    "builtin::set_bg_sidebar_right" => register_path_action(
+                        &action_group,
+                        "set-bg-sidebar-right",
+                        sender,
+                        target_path,
+                        action_toast.clone(),
+                        |s, target, toast| {
+                            s.input(AppMsg::SetFluxBackground {
+                                target,
+                                slot: crate::model::BackgroundSlot::SidebarRight,
+                            });
+                            emit_toast(s, toast);
+                        },
+                    ),
+                    "builtin::select_folder_icon" => register_path_action(
+                        &action_group,
+                        "select-folder-icon",
+                        sender,
+                        target_path,
+                        action_toast.clone(),
+                        |s, target, toast| {
+                            s.input(AppMsg::ShowIconPicker(target));
+                            emit_toast(s, toast);
+                        },
+                    ),
+                    "builtin::inspect_dir" => register_path_action(
+                        &action_group,
+                        "inspect-dir",
+                        sender,
+                        target_path,
+                        action_toast.clone(),
+                        |s, target, _| s.input(AppMsg::InspectDirectory(target)),
+                    ),
+                    "builtin::open_with_dialog" => register_path_action(
+                        &action_group,
+                        "open-with-dialog",
+                        sender,
+                        target_path,
+                        action_toast.clone(),
+                        |s, target, toast| {
+                            s.input(AppMsg::ShowOpenWithDialog(target));
+                            emit_toast(s, toast);
+                        },
+                    ),
+                    "builtin::reset_custom_icon" => register_path_action(
+                        &action_group,
+                        "reset-custom-icon",
+                        sender,
+                        target_path,
+                        action_toast.clone(),
+                        |s, target, toast| {
+                            s.input(AppMsg::ResetFileIcon(target));
+                            emit_toast(s, toast);
+                        },
+                    ),
+                    "builtin::set_custom_icon" => register_path_action(
+                        &action_group,
+                        "set-custom-icon",
+                        sender,
+                        target_path,
+                        action_toast.clone(),
+                        |s, target, toast| {
+                            FluxApp::show_custom_icon_file_chooser(
+                                target,
+                                toast.map(str::to_owned),
+                                s.clone(),
+                            );
+                        },
+                    ),
+
+                    // ── Stateless, no target, optional toast ─────────────────
+                    "builtin::clear_backgrounds" => register_simple(
+                        &action_group,
+                        "clear-backgrounds",
+                        sender,
+                        action_toast.clone(),
+                        |s, toast| {
                             s.input(AppMsg::ClearFluxBackgrounds);
-                            if let Some(ref msg) = toast {
-                                s.input(AppMsg::ShowToast(msg.clone()));
-                            }
-                        });
-                        self.action_group.add_action(&action);
-                        ("win.clear-backgrounds".to_string(), "clear-backgrounds")
-                    }
-                    "builtin::select_folder_icon" => {
-                        let target = resolved_path
-                            .clone()
-                            .unwrap_or_else(|| self.current_path.clone());
-                        let action = gio::SimpleAction::new("select-folder-icon", None);
-                        action.set_enabled(true);
-                        let s = sender.clone();
-                        let toast = action_toast.clone();
-                        action.connect_activate(move |_, _| {
-                            s.input(AppMsg::ShowIconPicker(target.clone()));
-                            if let Some(ref msg) = toast {
-                                s.input(AppMsg::ShowToast(msg.clone()));
-                            }
-                        });
-                        self.action_group.add_action(&action);
-                        ("win.select-folder-icon".to_string(), "select-folder-icon")
-                    }
-                    "builtin::inspect_dir" => {
-                        let target = resolved_path
-                            .clone()
-                            .unwrap_or_else(|| self.current_path.clone());
-                        let s = sender.clone();
-                        let action = gio::SimpleAction::new("inspect-dir", None);
-                        action.connect_activate(move |_, _| {
-                            s.input(AppMsg::InspectDirectory(target.clone()));
-                        });
-                        self.action_group.add_action(&action);
-                        ("win.inspect-dir".to_string(), "inspect-dir")
-                    }
-                    "builtin::open_with_dialog" => {
-                        let target = resolved_path
-                            .clone()
-                            .unwrap_or_else(|| self.current_path.clone());
-                        let action = gio::SimpleAction::new("open-with-dialog", None);
-                        let s = sender.clone();
-                        let toast = action_toast.clone();
-                        action.connect_activate(move |_, _| {
-                            s.input(AppMsg::ShowOpenWithDialog(target.clone()));
-                            if let Some(ref msg) = toast {
-                                s.input(AppMsg::ShowToast(msg.clone()));
-                            }
-                        });
-                        self.action_group.add_action(&action);
-                        ("win.open-with-dialog".to_string(), "open-with-dialog")
+                            emit_toast(s, toast);
+                        },
+                    ),
+                    "builtin::add_to_quick_list" => register_simple(
+                        &action_group,
+                        "add-to-quick-list",
+                        sender,
+                        action_toast.clone(),
+                        |s, toast| {
+                            s.input(AppMsg::AddExclusive(None));
+                            emit_toast(s, toast);
+                        },
+                    ),
+                    "builtin::toggle_pin" => register_simple(
+                        &action_group,
+                        "toggle-pin",
+                        sender,
+                        action_toast.clone(),
+                        |s, toast| {
+                            s.input(AppMsg::AddToSidebarPermanent);
+                            emit_toast(s, toast);
+                        },
+                    ),
+                    "builtin::delete" => register_simple(
+                        &action_group,
+                        "delete-selection",
+                        sender,
+                        action_toast.clone(),
+                        |s, toast| {
+                            s.input(AppMsg::Delete);
+                            emit_toast(s, toast);
+                        },
+                    ),
+                    "builtin::new_folder" => register_simple(
+                        &action_group,
+                        "new-folder",
+                        sender,
+                        action_toast.clone(),
+                        |s, toast| {
+                            s.input(AppMsg::PromptNewFolder);
+                            emit_toast(s, toast);
+                        },
+                    ),
+                    "builtin::new_file" => register_simple(
+                        &action_group,
+                        "new-file",
+                        sender,
+                        action_toast.clone(),
+                        |s, toast| {
+                            s.input(AppMsg::PromptNewFile);
+                            emit_toast(s, toast);
+                        },
+                    ),
+
+                    // ── Extension-scoped: skip when target has no extension ──
+                    "builtin::set_extension_icon" => {
+                        let Some(ext) = resolved_path.as_ref().and_then(|p| {
+                            p.extension().and_then(|e| e.to_str()).map(str::to_owned)
+                        }) else {
+                            continue;
+                        };
+                        register_simple(
+                            &action_group,
+                            "set-extension-icon",
+                            sender,
+                            action_toast.clone(),
+                            move |s, toast| {
+                                FluxApp::show_extension_icon_file_chooser(
+                                    ext.clone(),
+                                    toast.map(str::to_owned),
+                                    s.clone(),
+                                );
+                            },
+                        )
                     }
                     "builtin::reset_extension_icon" => {
-                        let ext_opt = resolved_path.as_ref().and_then(|p| {
-                            p.extension()
-                                .and_then(|e| e.to_str())
-                                .map(|s| s.to_string())
-                        });
-
-                        if let Some(ext_owned) = ext_opt {
-                            let reset_action = gio::SimpleAction::new("reset-extension-icon", None);
-                            let s = sender.clone();
-                            let toast_clone = action_toast.clone();
-                            reset_action.connect_activate(move |_, _| {
-                                s.input(AppMsg::ResetExtensionIcon(ext_owned.clone()));
-                                if let Some(ref msg) = toast_clone {
-                                    s.input(AppMsg::ShowToast(msg.clone()));
-                                }
-                            });
-                            self.action_group.add_action(&reset_action);
-                            (
-                                "win.reset-extension-icon".to_string(),
-                                "reset-extension-icon",
-                            )
-                        } else {
+                        let Some(ext) = resolved_path.as_ref().and_then(|p| {
+                            p.extension().and_then(|e| e.to_str()).map(str::to_owned)
+                        }) else {
                             continue;
-                        }
+                        };
+                        register_simple(
+                            &action_group,
+                            "reset-extension-icon",
+                            sender,
+                            action_toast.clone(),
+                            move |s, toast| {
+                                s.input(AppMsg::ResetExtensionIcon(ext.clone()));
+                                emit_toast(s, toast);
+                            },
+                        )
                     }
-                    "builtin::add_to_quick_list" => {
-                        let quick_action = gio::SimpleAction::new("add-to-quick-list", None);
-                        let sender_q = sender.clone();
-                        let toast = action_toast.clone();
 
-                        quick_action.connect_activate(move |_, _| {
-                            sender_q.input(AppMsg::AddExclusive(None));
-                            if let Some(ref msg) = toast {
-                                sender_q.input(AppMsg::ShowToast(msg.clone()));
-                            }
-                        });
-                        self.action_group.add_action(&quick_action);
-                        ("win.add-to-quick-list".to_string(), "add-to-quick-list")
-                    }
+                    // ── File-only builtins ────────────────────────────────────
                     "builtin::tagfile" => {
-                        if mime != constants::MIME_DIR {
-                            let action = gio::SimpleAction::new("tag-file", None);
-                            let s = sender.clone();
-                            let toast = action_toast.clone();
-                            action.connect_activate(move |_, _| {
-                                s.input(AppMsg::OpenTagPicker);
-                                if let Some(ref msg) = toast {
-                                    s.input(AppMsg::ShowToast(msg.clone()));
-                                }
-                            });
-                            self.action_group.add_action(&action);
-                            ("win.tag-file".to_string(), "tag-file")
-                        } else {
+                        if mime == constants::MIME_DIR {
                             continue;
                         }
+                        register_simple(
+                            &action_group,
+                            "tag-file",
+                            sender,
+                            action_toast.clone(),
+                            |s, toast| {
+                                s.input(AppMsg::OpenTagPicker);
+                                emit_toast(s, toast);
+                            },
+                        )
                     }
-                    "builtin::reset_custom_icon" => {
-                        let target = resolved_path
-                            .clone()
-                            .unwrap_or_else(|| self.current_path.clone());
-                        let action = gio::SimpleAction::new("reset-custom-icon", None);
-                        let s = sender.clone();
-                        let toast = action_toast.clone();
-                        action.connect_activate(move |_, _| {
-                            s.input(AppMsg::ResetFileIcon(target.clone()));
-                            if let Some(ref msg) = toast {
-                                s.input(AppMsg::ShowToast(msg.clone()));
-                            }
-                        });
-                        self.action_group.add_action(&action);
-                        ("win.reset-custom-icon".to_string(), "reset-custom-icon")
-                    }
-                    "builtin::set_custom_icon" => {
-                        let target = resolved_path
-                            .clone()
-                            .unwrap_or_else(|| self.current_path.clone());
-                        let set_icon_action = gio::SimpleAction::new("set-custom-icon", None);
-                        let sender_ic = sender.clone();
-                        let toast_clone = action_toast.clone();
-                        set_icon_action.connect_activate(move |_, _| {
-                            FluxApp::show_custom_icon_file_chooser(
-                                target.clone(),
-                                toast_clone.clone(),
-                                sender_ic.clone(),
-                            );
-                        });
-                        self.action_group.add_action(&set_icon_action);
-                        ("win.set-custom-icon".to_string(), "set-custom-icon")
-                    }
-                    "builtin::toggle_pin" => {
-                        let action = gio::SimpleAction::new("toggle-pin", None);
-                        let s = sender.clone();
-                        let toast = action_toast.clone();
-                        action.connect_activate(move |_, _| {
-                            s.input(AppMsg::AddToSidebarPermanent);
-                            if let Some(ref msg) = toast {
-                                s.input(AppMsg::ShowToast(msg.clone()));
-                            }
-                        });
-                        self.action_group.add_action(&action);
-                        ("win.toggle-pin".to_string(), "toggle-pin")
-                    }
-                    "builtin::delete" => {
-                        let action = gio::SimpleAction::new("delete-selection", None);
-                        let s = sender.clone();
-                        let toast = action_toast.clone();
-                        action.connect_activate(move |_, _| {
-                            s.input(AppMsg::Delete);
-                            if let Some(ref msg) = toast {
-                                s.input(AppMsg::ShowToast(msg.clone()));
-                            }
-                        });
-                        self.action_group.add_action(&action);
-                        ("win.delete-selection".to_string(), "delete-selection")
-                    }
-                    "builtin::new_folder" => {
-                        let action = gio::SimpleAction::new("new-folder", None);
-                        let s = sender.clone();
-                        let toast = action_toast.clone();
-                        action.connect_activate(move |_, _| {
-                            s.input(AppMsg::PromptNewFolder);
-                            if let Some(ref msg) = toast {
-                                s.input(AppMsg::ShowToast(msg.clone()));
-                            }
-                        });
-                        self.action_group.add_action(&action);
-                        ("win.new-folder".to_string(), "new-folder")
-                    }
-                    "builtin::new_file" => {
-                        let action = gio::SimpleAction::new("new-file", None);
-                        let s = sender.clone();
-                        let toast = action_toast.clone();
-                        action.connect_activate(move |_, _| {
-                            s.input(AppMsg::PromptNewFile);
-                            if let Some(ref msg) = toast {
-                                s.input(AppMsg::ShowToast(msg.clone()));
-                            }
-                        });
-                        self.action_group.add_action(&action);
-                        ("win.new-file".to_string(), "new-file")
-                    }
+
+                    // ── User-defined shell action from menu.rs ────────────────
                     _ => (
                         format!("win.{}", action.action_name),
                         action.action_name.as_str(),
                     ),
                 };
 
-                // --- ENABLE ACTION IN GROUP ---
-                if let Some(g_action) = self.action_group.lookup_action(lookup_name) {
-                    if let Some(simple) = g_action.downcast_ref::<gio::SimpleAction>() {
-                        simple.set_enabled(true);
-                    }
-                }
+                let (full_action_name, _lookup_name) = reg;
 
                 // Route to Submenu or Main Section
                 if let Some(group_name) = &action.submenu {
