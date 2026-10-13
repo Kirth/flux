@@ -64,39 +64,47 @@ pub fn format_display_label(name: &str, is_dir: bool, hidden_extensions: &[Strin
 
     let name_lc = name.to_ascii_lowercase();
 
-    for clean in patterns {
-        if clean.contains('*') || clean.contains('?') || clean.contains('[') {
+    let glob_matchers: Vec<globset::GlobMatcher> = patterns
+        .iter()
+        .filter(|c| c.contains('*') || c.contains('?') || c.contains('['))
+        .filter_map(|clean| {
             let pat = if clean.starts_with('*') {
-                clean
+                clean.clone()
             } else if clean.starts_with('.') {
                 format!("*{}", clean)
             } else {
                 format!("*.{}", clean)
             };
-
-            if let Ok(glob) = globset::GlobBuilder::new(&pat)
+            globset::GlobBuilder::new(&pat)
                 .case_insensitive(true)
                 .literal_separator(false)
                 .build()
-            {
-                let matcher = glob.compile_matcher();
-                if matcher.is_match(&name_lc) {
-                    for (byte_idx, _) in name.match_indices('.') {
-                        if byte_idx > 0 && byte_idx < name.len() {
-                            let ext_slice = &name_lc[byte_idx..];
-                            let test_str = format!("x{}", ext_slice);
-                            if matcher.is_match(&test_str) {
-                                return name[..byte_idx].to_string();
-                            }
-                        }
+                .ok()
+                .map(|g| g.compile_matcher())
+        })
+        .collect();
+
+    for matcher in &glob_matchers {
+        if matcher.is_match(&name_lc) {
+            for (byte_idx, _) in name.match_indices('.') {
+                if byte_idx > 0 && byte_idx < name.len() {
+                    let ext_slice = &name_lc[byte_idx..];
+                    let test_str = format!("x{}", ext_slice);
+                    if matcher.is_match(&test_str) {
+                        return name[..byte_idx].to_string();
                     }
                 }
             }
+        }
+    }
+
+    for clean in &patterns {
+        if clean.contains('*') || clean.contains('?') || clean.contains('[') {
             continue;
         }
 
         let suffix = if clean.starts_with('.') {
-            clean
+            clean.clone()
         } else {
             format!(".{}", clean)
         };
