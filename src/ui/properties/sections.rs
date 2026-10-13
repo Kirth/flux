@@ -143,7 +143,6 @@ pub(super) fn build_sections(
 
             sections_data.push((tr("Security"), vec![(tr("SHA256"), hash_hex)]));
         }
-        sections_data.push((tr("Security"), security));
     }
 
     // ── ELF analysis ────────────────────────────────────────────────────────
