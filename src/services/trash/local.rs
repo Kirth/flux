@@ -1,4 +1,3 @@
-use super::recursive::delete_recursive;
 use crate::model::{AppMsg, FluxApp};
 use gtk::gio::prelude::FileExt;
 use gtk::{gio, glib};
@@ -26,38 +25,16 @@ pub(super) fn delete_via_trash(
             }
             Err(trash_err) => {
                 eprintln!(
-                    "[Delete] trash_async failed gio_kind={:?} msg={:?}, falling back to delete_recursive",
+                    "[Delete] trash_async failed gio_kind={:?} msg={:?}",
                     trash_err.kind::<gio::IOErrorEnum>(),
                     trash_err.message()
                 );
-
-                let s_inner = sender.clone();
-                relm4::spawn_blocking(move || {
-                    match delete_recursive(&file_for_fallback) {
-                        Ok(()) => {
-                            s_inner.input(AppMsg::Refresh);
-                        }
-                        Err(e) => {
-                            eprintln!(
-                                "[Delete] fallback delete_recursive failed gio_kind={:?} msg={:?}",
-                                e.kind::<gio::IOErrorEnum>(),
-                                e.message()
-                            );
-                            if e.message().contains("Permission denied")
-                                || e.message().contains("Operation not permitted")
-                            {
-                                s_inner.input(AppMsg::ShowToast(
-                                    "Permission denied: Cannot delete item.".into(),
-                                ));
-                            } else {
-                                s_inner.input(AppMsg::ShowToast(format!(
-                                    "Deletion error: {}",
-                                    e
-                                )));
-                            }
-                        }
-                    }
-                });
+                let _ = file_for_fallback;
+                sender.input(AppMsg::ShowToast(format!(
+                    "{}: {}",
+                    crate::i18n::tr("Could not move to trash"),
+                    trash_err.message()
+                )));
             }
         },
     );
