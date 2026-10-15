@@ -12,3 +12,4 @@ pub use icons::{
 };
 #[allow(unused_imports)]
 pub use icons::{get_generated_extension_icon_path, resolve_thumb_source};
+pub(crate) use media::is_visual_media_by_ext;

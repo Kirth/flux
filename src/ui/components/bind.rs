@@ -1,6 +1,9 @@
 use super::file_item::FileItem;
-use super::widgets::FileWidgets;
+use super::widgets::{FileWidgets, FolderInfoWidgets};
 use crate::i18n::tr;
+use crate::services::thumbnails::{
+    bar_segments, breakdown_tooltip, format_stats_line, FileCategory, FolderStats,
+};
 use crate::ui::constants;
 use adw::gdk;
 use adw::prelude::*;
@@ -21,6 +24,152 @@ fn format_size(bytes: u64) -> String {
         b if b >= MB => format!("{:.1} MB", b as f64 / MB as f64),
         b if b >= KB => format!("{:.0} KB", b as f64 / KB as f64),
         b => format!("{b} B"),
+    }
+}
+
+/// Shows up to four media thumbnails on a folder's grid icon; hides the grid when
+/// there are none or in list mode (icons are too small there).
+pub(crate) fn apply_folder_previews(
+    grid: &gtk::Grid,
+    textures: &[gdk::Texture],
+    icon_size: i32,
+    is_list_mode: bool,
+) {
+    if textures.is_empty() || is_list_mode || icon_size < 48 {
+        grid.set_visible(false);
+        return;
+    }
+    // Placed on the front panel of a typical folder icon. The grid fills the icon
+    // overlay and margins carve out its box: a size request would only be a minimum,
+    // and the pictures' natural size (the thumbnail resolution) would win.
+    const THUMB_MARGIN: i32 = 6; // `.thumbnail` CSS margin around the icon image
+    let width = icon_size * 58 / 100;
+    let height = icon_size * 40 / 100;
+    let bottom = icon_size * 17 / 100;
+    let side = (icon_size - width) / 2 + THUMB_MARGIN;
+    grid.set_margin_start(side);
+    grid.set_margin_end(side);
+    grid.set_margin_bottom(bottom + THUMB_MARGIN);
+    grid.set_margin_top(icon_size - height - bottom + THUMB_MARGIN);
+
+    let mut child = grid.first_child();
+    let mut i = 0;
+    while let Some(w) = child {
+        child = w.next_sibling();
+        if let Some(picture) = w.downcast_ref::<gtk::Picture>() {
+            match textures.get(i) {
+                Some(t) => {
+                    picture.set_paintable(Some(t));
+                    picture.set_visible(true);
+                }
+                None => {
+                    picture.set_paintable(None::<&gdk::Paintable>);
+                    picture.set_visible(false);
+                }
+            }
+            i += 1;
+        }
+    }
+    grid.set_visible(true);
+}
+
+/// A composition bar: a faint track holding one segment per file category.
+pub(crate) fn build_composition_bar() -> gtk::Box {
+    let bar = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .css_classes(["flux-folder-bar"])
+        .overflow(gtk::Overflow::Hidden)
+        .build();
+    for cat in FileCategory::ALL {
+        let segment = gtk::Box::builder()
+            .css_classes(["flux-folder-bar-seg", &format!("flux-cat-{}", cat.key())])
+            .visible(false)
+            .build();
+        bar.append(&segment);
+    }
+    bar
+}
+
+/// Sizes a composition bar's track to `max_px` and its segments to `stats`.
+fn set_composition_bar(bar: &gtk::Box, stats: Option<&FolderStats>, max_px: i32) {
+    bar.set_size_request(max_px, -1);
+    let widths = stats.map_or([0; 7], |s| bar_segments(s, max_px));
+    let mut child = bar.first_child();
+    let mut i = 0;
+    while let Some(segment) = child {
+        child = segment.next_sibling();
+        let w = widths.get(i).copied().unwrap_or(0);
+        segment.set_size_request(w, -1);
+        segment.set_visible(w > 0);
+        i += 1;
+    }
+}
+
+/// Shows a folder's previews, and its weight bar + stats line (grid) or byte size +
+/// mini bar in the Size column (list).
+///
+/// In grid mode the bar and line are always laid out when stats are enabled (just
+/// blank until the scan arrives), so a cell never changes height and the grid
+/// never reflows when stats come in.
+pub(crate) fn apply_folder_info(w: &FolderInfoWidgets, item: &FileItem) {
+    apply_folder_previews(
+        &w.preview,
+        &item.folder_previews,
+        item.icon_size,
+        item.is_list_mode,
+    );
+    let stats = item.folder_stats.as_ref().filter(|_| item.is_dir);
+    let tooltip = stats.map(breakdown_tooltip);
+
+    let grid_stats = item.show_folder_stats && !item.is_list_mode;
+    w.bar.set_visible(grid_stats);
+    w.stats_label.set_visible(grid_stats);
+    if grid_stats {
+        set_composition_bar(&w.bar, stats, item.icon_size * 80 / 100);
+        w.bar.set_opacity(if stats.is_some() { 1.0 } else { 0.0 });
+        w.bar.set_tooltip_text(tooltip.as_deref());
+        w.stats_label
+            .set_label(&stats.map(format_stats_line).unwrap_or_default());
+        w.stats_label.set_tooltip_text(tooltip.as_deref());
+    }
+
+    match stats.filter(|_| item.is_list_mode && item.show_folder_stats) {
+        // Only subfolders (or nothing): "3 items" / "Empty" reads better than "0 bytes".
+        Some(s) if s.total_bytes == 0 => {
+            w.size_label.set_label(&format_stats_line(s));
+            w.size_label.set_tooltip_text(tooltip.as_deref());
+            w.size_bar.set_visible(false);
+        }
+        Some(s) => {
+            w.size_label
+                .set_label(&gtk::glib::format_size(s.total_bytes));
+            w.size_label.set_tooltip_text(tooltip.as_deref());
+            let width = crate::ui::list_columns::width(crate::ui::list_columns::ListColumn::Size);
+            set_composition_bar(&w.size_bar, Some(s), (width - 8).max(0));
+            w.size_bar.set_visible(true);
+        }
+        None => w.size_bar.set_visible(false),
+    }
+}
+
+fn clear_folder_info(w: &FolderInfoWidgets) {
+    apply_folder_previews(&w.preview, &[], 0, false);
+    set_composition_bar(&w.bar, None, 0);
+    w.bar.set_tooltip_text(None);
+    w.stats_label.set_label("");
+    w.stats_label.set_tooltip_text(None);
+    w.size_bar.set_visible(false);
+}
+
+/// [`apply_folder_info`] for a live cell found by `FluxApp::find_widget_by_path`.
+pub(crate) fn apply_folder_info_to_cell(cell: &gtk::Widget, item: &FileItem) {
+    // SAFETY: "folder_info" is only ever set to FolderInfoWidgets, in the item setup.
+    let widgets = unsafe {
+        cell.data::<FolderInfoWidgets>("folder_info")
+            .map(|p| p.as_ref().clone())
+    };
+    if let Some(widgets) = widgets {
+        apply_folder_info(&widgets, item);
     }
 }
 
@@ -417,6 +566,8 @@ impl FileItem {
             widgets.file_emblem.set_visible(false);
         }
 
+        apply_folder_info(&widgets.folder_info, self);
+
         crate::hit!("bind_git_badge");
         if let Some((emblem, class_name)) = self.git_status.badge_info() {
             widgets.git_badge.set_label(emblem);
@@ -631,9 +782,12 @@ impl FileItem {
         {
             stream.pause();
         }
-        // SAFETY: "preview_restore" is only ever set to Option<gdk::Paintable>.
+        // SAFETY: preview data keys are only ever set with these types (video_preview.rs).
         unsafe {
             let _ = root.steal_data::<Option<gdk::Paintable>>("preview_restore");
+            if let Some(stream) = root.steal_data::<gtk::MediaStream>("preview_stream") {
+                stream.pause();
+            }
         }
 
         if let Some(ref provider) = widgets.scale_css_provider {
@@ -654,6 +808,7 @@ impl FileItem {
         widgets.git_badge.set_visible(false);
         widgets.git_badge.set_css_classes(&["flux-git-badge"]);
         widgets.file_emblem.set_visible(false);
+        clear_folder_info(&widgets.folder_info);
 
         // Release the texture on both the widget and the item model
         widgets.icon_widget.set_paintable(None::<&gdk::Paintable>);

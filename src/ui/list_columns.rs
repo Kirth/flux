@@ -419,8 +419,9 @@ pub const LIST_CELL_SPACING: i32 = 10;
 /// header's resize handle occupies it, so it doubles as the drag target.
 const LIST_CELL_PAD: i32 = 8;
 
-/// Builds the per-row cell box (one label per [`ListColumn`], in order).
-pub fn build_row_cells() -> (gtk::Box, Vec<gtk::Label>) {
+/// Builds the per-row cell box (one label per [`ListColumn`], in order), plus the
+/// folder composition mini bar that sits under the Size label.
+pub fn build_row_cells() -> (gtk::Box, Vec<gtk::Label>, gtk::Box) {
     let cells = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
         .valign(gtk::Align::Center)
@@ -430,19 +431,37 @@ pub fn build_row_cells() -> (gtk::Box, Vec<gtk::Label>) {
     let labels: Vec<gtk::Label> = ListColumn::ALL
         .iter()
         .map(|col| {
-            let label = gtk::Label::builder()
+            gtk::Label::builder()
                 .xalign(col.xalign())
                 .ellipsize(gtk::pango::EllipsizeMode::End)
                 .width_chars(1)
                 .max_width_chars(1)
                 .css_classes(["flux-list-cell"])
-                .build();
-            cells.append(&label);
-            label
+                .build()
         })
         .collect();
+
+    let size_bar = super::components::build_composition_bar();
+    size_bar.set_halign(gtk::Align::End);
+    size_bar.add_css_class("flux-folder-bar--mini");
+    size_bar.set_visible(false);
+
+    // One top-level child per column, so `apply_layout` sizes the Size wrapper.
+    for (col, label) in ListColumn::ALL.iter().zip(&labels) {
+        if *col == ListColumn::Size {
+            let wrapper = gtk::Box::builder()
+                .orientation(gtk::Orientation::Vertical)
+                .valign(gtk::Align::Center)
+                .build();
+            wrapper.append(label);
+            wrapper.append(&size_bar);
+            cells.append(&wrapper);
+        } else {
+            cells.append(label);
+        }
+    }
     register_row(&cells);
-    (cells, labels)
+    (cells, labels, size_bar)
 }
 
 // ── Cell formatters ─────────────────────────────────────────────────────────

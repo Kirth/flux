@@ -209,6 +209,12 @@ pub struct UIConfig {
     /// When true, drag-and-drop operations for files and folders are completely disabled.
     #[serde(default)]
     pub disable_drag_and_drop: bool,
+    /// Show a 2×2 grid of image/video thumbnails from inside a folder on its grid icon.
+    #[serde(default = "default_true")]
+    pub show_folder_previews: bool,
+    /// Show how full/heavy a folder is (size, item count, type composition bar).
+    #[serde(default = "default_true")]
+    pub show_folder_stats: bool,
     /// Detail columns shown in list view, besides Name (keys: size, modified, created,
     /// type, owner, permissions). Display order is fixed; unknown keys are ignored.
     #[serde(default = "default_list_columns")]
@@ -267,6 +273,8 @@ impl Default for UIConfig {
             disable_drag_and_drop: false,
             list_columns: default_list_columns(),
             list_column_widths: Default::default(),
+            show_folder_previews: true,
+            show_folder_stats: true,
             loader_batch_size: default_loader_batch_size(),
             folder_cache_capacity: default_folder_cache_capacity(),
             thumbnail_threads: default_thumbnail_threads(),

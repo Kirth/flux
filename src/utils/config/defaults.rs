@@ -236,6 +236,8 @@ path = "search://"
                     disable_drag_and_drop: false,
                     list_columns: crate::model::UIConfig::default().list_columns,
                     list_column_widths: Default::default(),
+                    show_folder_previews: true,
+                    show_folder_stats: true,
                     loader_batch_size: 50,
                     folder_cache_capacity: 3,
                     thumbnail_threads: 4,

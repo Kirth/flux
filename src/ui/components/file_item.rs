@@ -39,6 +39,12 @@ pub struct FileItem {
     pub uid: Option<u32>,
     /// Unix timestamp of the creation (birth) time, `0` when unavailable.
     pub created: i64,
+    /// Up to four thumbnails of media inside this folder, drawn on its grid icon.
+    pub folder_previews: Vec<gdk::Texture>,
+    /// Size/item count/type composition of this folder's direct contents, once scanned.
+    pub folder_stats: Option<crate::services::thumbnails::FolderStats>,
+    /// Cached `config.ui.show_folder_stats`: reserve room for the weight bar/line.
+    pub show_folder_stats: bool,
     /// Position of this item in the grid model.
     ///
     /// Set at construction time in `loader.rs` and read by `bind()` to dispatch

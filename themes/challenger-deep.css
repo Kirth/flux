@@ -1,0 +1,448 @@
+/* Challenger Deep — translucent indigo theme for flux.
+ *
+ * Matches a Challenger Deep terminal palette (#1b182c at ~85% opacity) and a
+ * violet → orange window focus ring. Loaded on top of flux's base stylesheet, so
+ * it only overrides colours, radii and surfaces.
+ */
+
+:root {
+  --font-main: "Inter Variable", "Inter", "Noto Sans", system-ui, sans-serif;
+  --font-mono: "Iosevka", "Hack", "JetBrains Mono", monospace;
+  --shadow: rgba(4, 3, 12, 0.55);
+  --shadow-hover: rgba(4, 3, 12, 0.65);
+}
+
+/* ── palette ── */
+@define-color cd_bg #1b182c;
+@define-color cd_deep #100e23;
+@define-color cd_raised #2b2742;
+@define-color cd_fg #cbe3e7;
+@define-color cd_muted #a6b3cc;
+@define-color cd_dim #565575;
+@define-color cd_violet #906cff;
+@define-color cd_lilac #c991e1;
+@define-color cd_blue #91ddff;
+@define-color cd_cyan #63f2f1;
+@define-color cd_green #95ffa4;
+@define-color cd_yellow #ffe9aa;
+@define-color cd_orange #ffb378;
+@define-color cd_red #ff8080;
+@define-color cd_ring_from #b026ff;
+@define-color cd_ring_to #ff6b35;
+
+@define-color accent_color @cd_violet;
+@define-color accent_bg_color @cd_violet;
+@define-color accent_fg_color #ffffff;
+@define-color theme_fg_color @cd_fg;
+@define-color window_fg_color @cd_fg;
+@define-color view_fg_color @cd_fg;
+@define-color headerbar_fg_color @cd_fg;
+@define-color popover_fg_color @cd_fg;
+@define-color window_bg_color @cd_bg;
+@define-color view_bg_color @cd_bg;
+@define-color popover_bg_color @cd_deep;
+@define-color card_bg_color @cd_raised;
+@define-color destructive_bg_color @cd_red;
+@define-color destructive_fg_color @cd_deep;
+
+/* ── window: translucent like the terminals ── */
+window.background,
+window.background > contents {
+  background-color: alpha(@cd_bg, 0.85);
+  color: @cd_fg;
+  font-family: var(--font-main);
+}
+
+toolbarview,
+toolbarview > revealer,
+headerbar,
+tabbar,
+tabbar .box,
+scrolledwindow,
+viewport,
+gridview,
+gridview.view,
+listview,
+listview.view,
+.view,
+stack,
+paned,
+paned > separator {
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+}
+
+paned > separator {
+  min-height: 1px;
+  background-color: alpha(@cd_fg, 0.06);
+}
+
+/* ── sidebar: darker translucent panel ── */
+.sidebar {
+  background-color: alpha(@cd_deep, 0.55);
+  border: 1px solid alpha(@cd_fg, 0.07);
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.sidebar-row:not(.sidebar-section) {
+  border-radius: 8px;
+  color: alpha(@cd_fg, 0.82);
+}
+
+.sidebar-row:not(.sidebar-section) label {
+  color: alpha(@cd_fg, 0.82);
+}
+
+.sidebar list > row:hover:not(:selected),
+.sidebar-row:not(.sidebar-section):hover:not(:selected) {
+  background-color: alpha(@cd_fg, 0.06);
+  transform: none;
+}
+
+.sidebar list > row:selected,
+.sidebar-row:not(.sidebar-section):selected {
+  background-color: alpha(@cd_violet, 0.22);
+  box-shadow: inset 2px 0 0 @cd_violet;
+  transform: none;
+}
+
+.sidebar-row:not(.sidebar-section):selected label {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.sidebar-row:not(.sidebar-section):selected image {
+  color: @cd_lilac;
+}
+
+.sidebar-section-label {
+  color: alpha(@cd_muted, 0.6);
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+}
+
+.sidebar-row button.sidebar-expander {
+  color: @cd_dim;
+}
+
+.sidebar-row button.sidebar-expander:hover {
+  color: @cd_fg;
+}
+
+/* ── header ── */
+headerbar {
+  min-height: 2.6em;
+}
+
+headerbar button,
+headerbar togglebutton,
+headerbar menubutton {
+  border-radius: 8px;
+  color: alpha(@cd_fg, 0.75);
+}
+
+headerbar button:hover,
+headerbar togglebutton:hover,
+headerbar menubutton:hover {
+  background-color: alpha(@cd_fg, 0.07);
+  color: @cd_fg;
+}
+
+headerbar togglebutton:checked {
+  background-color: alpha(@cd_violet, 0.25);
+  color: #ffffff;
+}
+
+button.breadcrumb-btn {
+  background: alpha(@cd_fg, 0.05);
+  border: none;
+  box-shadow: none;
+  color: alpha(@cd_fg, 0.7);
+}
+
+button.breadcrumb-btn:first-child {
+  border-radius: 8px 0 0 8px;
+}
+
+button.breadcrumb-btn:hover:not(:last-child) {
+  background: alpha(@cd_fg, 0.1);
+  box-shadow: none;
+  color: @cd_fg;
+}
+
+button.breadcrumb-btn:last-child {
+  border-radius: 0 8px 8px 0;
+  background: linear-gradient(120deg, alpha(@cd_ring_from, 0.75), alpha(@cd_ring_to, 0.75));
+  box-shadow: none;
+  color: #ffffff;
+}
+
+button.breadcrumb-btn:only-child {
+  border-radius: 8px;
+}
+
+button.breadcrumb-btn:last-child label {
+  color: #ffffff;
+}
+
+button.breadcrumb-btn:last-child:hover {
+  background: linear-gradient(120deg, @cd_ring_from, @cd_ring_to);
+  box-shadow: none;
+}
+
+.sort-label {
+  color: alpha(@cd_fg, 0.75);
+}
+
+/* ── folder weight bar ── */
+@define-color flux_cat_images @cd_lilac;
+@define-color flux_cat_video @cd_orange;
+@define-color flux_cat_audio @cd_cyan;
+@define-color flux_cat_documents @cd_yellow;
+@define-color flux_cat_code @cd_blue;
+@define-color flux_cat_archives @cd_red;
+@define-color flux_cat_other @cd_dim;
+
+.flux-folder-bar {
+  background-color: alpha(@cd_fg, 0.07);
+}
+
+.flux-folder-stats {
+  font-family: var(--font-mono);
+  color: alpha(@cd_muted, 0.6);
+}
+
+/* ── file grid ── */
+.flux-label {
+  color: @cd_fg;
+}
+
+gridview child:selected .flux-card {
+  box-shadow: 0 0 0 2px @cd_violet;
+}
+
+gridview child:selected .flux-label {
+  color: #ffffff;
+}
+
+gridview.flux-list-mode > child:selected .flux-card {
+  background-color: alpha(@cd_violet, 0.14);
+  box-shadow: inset 2px 0 0 @cd_violet;
+}
+
+gridview.flux-list-mode .flux-card {
+  border-radius: 6px;
+  box-shadow: inset 0 -1px alpha(@cd_fg, 0.04);
+}
+
+.flux-list-cell {
+  font-family: var(--font-mono);
+  color: alpha(@cd_muted, 0.85);
+}
+
+.flux-list-header {
+  border-bottom-color: alpha(@cd_fg, 0.08);
+}
+
+.flux-list-header button.flux-list-header-button {
+  font-family: var(--font-mono);
+  color: alpha(@cd_muted, 0.7);
+}
+
+.flux-list-resize:hover {
+  border-left-color: @cd_violet;
+}
+
+/* Cut items: just dimmed, no tinted box. */
+.flux-card.flux-card--cut {
+  background: none;
+  box-shadow: none;
+  opacity: 0.45;
+}
+
+gridview child:selected .flux-card.flux-card--cut {
+  box-shadow: 0 0 0 2px alpha(@cd_violet, 0.6);
+}
+
+.flux-file-emblem--link {
+  background-color: @cd_violet;
+  color: #ffffff;
+}
+
+.flux-file-emblem--broken {
+  background-color: @cd_red;
+  color: @cd_deep;
+}
+
+.flux-file-emblem--empty {
+  background-color: @cd_dim;
+  color: @cd_fg;
+}
+
+.flux-card.flux-card--broken-symlink .flux-label {
+  color: @cd_red;
+}
+
+entry.flux-rename-entry {
+  background-color: @cd_deep;
+  border: 1px solid @cd_violet;
+  border-radius: 6px;
+}
+
+/* ── entries ── */
+entry,
+searchentry,
+passwordentry {
+  background-color: alpha(@cd_fg, 0.06);
+  border: 1px solid alpha(@cd_fg, 0.08);
+  border-radius: 8px;
+  color: @cd_fg;
+  box-shadow: none;
+}
+
+/* The desktop gtk.css paints generic `text` nodes; keep fields one flat surface. */
+entry > text,
+searchentry > text,
+passwordentry > text {
+  background: none;
+  box-shadow: none;
+}
+
+entry:focus-within,
+searchentry:focus-within {
+  border-color: alpha(@cd_violet, 0.8);
+  box-shadow: 0 0 0 2px alpha(@cd_violet, 0.2);
+}
+
+/* ── menus, popovers, tooltips ── */
+popover,
+popover.background,
+popover.menu {
+  background: none;
+  box-shadow: none;
+}
+
+popover.menu contents,
+popover > contents {
+  background-color: alpha(@cd_deep, 0.96);
+  border: 1px solid alpha(@cd_violet, 0.22);
+  border-radius: 10px;
+  box-shadow: 0 0.6em 1.8em var(--shadow);
+  color: @cd_fg;
+}
+
+popover.menu modelbutton {
+  border-radius: 6px;
+}
+
+popover.menu modelbutton:hover {
+  background-color: alpha(@cd_violet, 0.28);
+  color: #ffffff;
+}
+
+popover.menu modelbutton:hover label,
+popover.menu modelbutton:hover accelerator,
+popover.menu modelbutton:hover .accelerator,
+popover.menu modelbutton:hover image,
+popover.menu modelbutton:hover arrow {
+  color: #ffffff;
+}
+
+popover.menu modelbutton accelerator,
+popover.menu modelbutton .accelerator {
+  font-family: var(--font-mono);
+  color: alpha(@cd_muted, 0.6);
+}
+
+popover.menu > contents separator {
+  background-color: alpha(@cd_fg, 0.07);
+}
+
+popover.menu check:checked,
+popover.menu check:checked:hover {
+  background-color: @cd_violet;
+  color: #ffffff;
+}
+
+tooltip.background,
+tooltip {
+  background-color: alpha(@cd_deep, 0.96);
+  border: 1px solid alpha(@cd_fg, 0.1);
+  border-radius: 6px;
+  color: @cd_fg;
+}
+
+tooltip label {
+  font-family: var(--font-mono);
+}
+
+/* ── status bar ── */
+.selection-status {
+  background-color: alpha(@cd_deep, 0.55);
+  border: 1px solid alpha(@cd_fg, 0.07);
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.selection-status label.caption {
+  font-family: var(--font-mono);
+  color: alpha(@cd_muted, 0.85);
+}
+
+.selection-status progressbar progress {
+  background-image: linear-gradient(90deg, @cd_ring_from, @cd_ring_to);
+  box-shadow: none;
+}
+
+/* ── tabs ── */
+tabbar tab {
+  border-radius: 8px;
+  color: alpha(@cd_fg, 0.6);
+}
+
+tabbar tab:selected {
+  background-color: alpha(@cd_violet, 0.18);
+  color: @cd_fg;
+}
+
+tabbar tab:hover:not(:selected) {
+  background-color: alpha(@cd_fg, 0.05);
+}
+
+/* ── scrollbars ── */
+scrollbar slider {
+  background-color: alpha(@cd_lilac, 0.35);
+  border-radius: 999px;
+  min-width: 4px;
+}
+
+scrollbar slider:hover {
+  background-color: alpha(@cd_lilac, 0.6);
+}
+
+/* ── window controls ── */
+windowcontrols button {
+  color: alpha(@cd_fg, 0.6);
+}
+
+windowcontrols button.close:hover {
+  background-color: @cd_red;
+  color: @cd_deep;
+}
+
+/* ── generic buttons ── */
+.suggested-action {
+  background-color: @cd_violet;
+  color: #ffffff;
+}
+
+.destructive-action {
+  background-color: @cd_red;
+  color: @cd_deep;
+}
+
+*:focus-visible {
+  outline-color: alpha(@cd_violet, 0.7);
+}

@@ -86,6 +86,11 @@ impl FluxApp {
         let active_tab = &mut self.tabs[self.active_tab_index];
         let start_idx = active_tab.files.len();
         let mut chunk_media_tasks: Vec<(u32, PathBuf)> = Vec::new();
+        let mut chunk_folder_tasks: Vec<(u32, PathBuf)> = Vec::new();
+        let current_str = self.current_path.to_string_lossy();
+        let folder_info = ((self.config.ui.show_folder_previews && self.config.ui.show_thumbnails)
+            || self.config.ui.show_folder_stats)
+            && !current_str.contains("://");
 
         let git_map = (self.git_status_dir == self.current_path).then_some(&self.git_status_map);
         for (offset, item) in items.into_iter().enumerate() {
@@ -164,6 +169,10 @@ impl FluxApp {
                 &self.config.ui.hidden_extensions,
             );
 
+            if folder_info && item.is_dir && !item.is_broken_symlink {
+                chunk_folder_tasks.push((grid_idx, item.target_path.clone()));
+            }
+
             let file_item = FileItem::builder(item.display_name, item.target_path, icon)
                 .display_label(display_label)
                 .is_dir(item.is_dir)
@@ -192,10 +201,18 @@ impl FluxApp {
                 .default_icon_size(self.config.ui.default_icon_size)
                 .show_empty_dir_emblem(self.config.ui.show_empty_dir_emblem)
                 .disable_drag_and_drop(self.config.ui.disable_drag_and_drop)
+                .show_folder_stats(self.config.ui.show_folder_stats && folder_info)
                 .build();
 
             self.tabs[self.active_tab_index].files.append(file_item);
         }
+
+        self.spawn_folder_info_loader(
+            chunk_folder_tasks,
+            load_id,
+            self.active_tab_index,
+            sender.clone(),
+        );
 
         if !chunk_media_tasks.is_empty() {
             if !self.config.ui.lazy_thumbnails {

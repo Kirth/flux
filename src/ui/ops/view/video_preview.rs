@@ -65,6 +65,15 @@ impl FluxApp {
         image.paintable().and_downcast::<gtk::MediaStream>()
     }
 
+    /// The preview stream attached to a cell, shown or still waiting for its first frame.
+    fn preview_stream(cell: &gtk::Widget) -> Option<gtk::MediaStream> {
+        // SAFETY: "preview_stream" is only ever set to a gtk::MediaStream, below.
+        unsafe {
+            cell.data::<gtk::MediaStream>("preview_stream")
+                .map(|p| p.as_ref().clone())
+        }
+    }
+
     pub fn stop_video_preview(&mut self) {
         if let Some(source_id) = self.video_preview_source.take() {
             source_id.remove();
@@ -75,13 +84,19 @@ impl FluxApp {
         };
 
         if let Some(widget) = self.find_widget_by_path(&active_path) {
+            // SAFETY: data keys are only ever set with these types, in this file.
+            let (stream, restore) = unsafe {
+                (
+                    widget.steal_data::<gtk::MediaStream>("preview_stream"),
+                    widget.steal_data::<Option<gtk::gdk::Paintable>>("preview_restore"),
+                )
+            };
+            if let Some(stream) = stream {
+                stream.pause();
+            }
             if let Some(image) = Self::preview_image(&widget) {
-                if let Some(stream) = Self::playing_stream(&image) {
-                    stream.pause();
-                    // SAFETY: "preview_restore" is only ever set to Option<gdk::Paintable>.
-                    let restore = unsafe {
-                        widget.steal_data::<Option<gtk::gdk::Paintable>>("preview_restore")
-                    };
+                // Only put the thumbnail back if the video had replaced it already.
+                if Self::playing_stream(&image).is_some() {
                     image.set_paintable(restore.flatten().as_ref());
                 }
             }
@@ -122,8 +137,7 @@ impl FluxApp {
         if self.active_video_preview.as_ref() == Some(&selected_path) {
             let still_playing = self
                 .find_widget_by_path(&selected_path)
-                .and_then(|w| Self::preview_image(&w))
-                .is_some_and(|image| Self::playing_stream(&image).is_some());
+                .is_some_and(|w| Self::preview_stream(&w).is_some());
 
             if still_playing {
                 return;
@@ -232,9 +246,10 @@ impl FluxApp {
             media_file.set_loop(true);
 
             // Keep the thumbnail so stopping the preview can put it back.
-            if let Some(old_stream) = Self::playing_stream(&image) {
+            if let Some(old_stream) = Self::preview_stream(&child) {
                 old_stream.pause();
-            } else {
+            }
+            if Self::playing_stream(&image).is_none() {
                 // SAFETY: read back with the same type in `stop_video_preview` / unbind.
                 unsafe {
                     child.set_data::<Option<gtk::gdk::Paintable>>(
@@ -243,7 +258,35 @@ impl FluxApp {
                     );
                 }
             }
-            image.set_paintable(Some(&media_file));
+            // SAFETY: read back as gtk::MediaStream in `preview_stream` / stop / unbind.
+            unsafe {
+                child.set_data::<gtk::MediaStream>("preview_stream", media_file.clone().upcast());
+            }
+
+            // Swap the thumbnail for the video only once the first frame is decoded;
+            // swapping immediately shows an empty icon until playback has started.
+            let first_frame: std::rc::Rc<std::cell::RefCell<Option<glib::SignalHandlerId>>> =
+                Default::default();
+            let handler = media_file.connect_invalidate_contents({
+                let image = image.downgrade();
+                let cell = child.downgrade();
+                let first_frame = first_frame.clone();
+                move |stream| {
+                    if let Some(id) = first_frame.borrow_mut().take() {
+                        stream.disconnect(id);
+                    }
+                    let (Some(image), Some(cell)) = (image.upgrade(), cell.upgrade()) else {
+                        return;
+                    };
+                    // Still this cell's current preview (not stopped or recycled)?
+                    let current = Self::preview_stream(&cell)
+                        .is_some_and(|s| s.upcast_ref::<gtk::gdk::Paintable>() == stream);
+                    if current {
+                        image.set_paintable(Some(stream));
+                    }
+                }
+            });
+            first_frame.replace(Some(handler));
             media_file.play();
         }
     }

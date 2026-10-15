@@ -24,6 +24,14 @@ pub(super) fn handle(
         AppMsg::RequestThumbnail { grid_idx, path, .. } => {
             app.handle_request_thumbnail(grid_idx, path, sender)
         }
+        AppMsg::FolderInfoReady {
+            grid_idx,
+            path,
+            previews,
+            stats,
+            load_id,
+            tab_index,
+        } => app.handle_folder_info_ready(grid_idx, path, previews, stats, load_id, tab_index),
         AppMsg::ThumbnailReady {
             grid_idx,
             texture,

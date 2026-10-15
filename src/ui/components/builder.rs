@@ -40,6 +40,7 @@ impl FileItem {
             default_icon_size: 96,
             show_empty_dir_emblem: false,
             disable_drag_and_drop: false,
+            show_folder_stats: false,
         }
     }
 }
@@ -54,6 +55,7 @@ pub struct FileItemBuilder {
     mtime: i64,
     mode: u32,
     uid: Option<u32>,
+    show_folder_stats: bool,
     created: i64,
     icon_size: i32,
     is_list_mode: bool,
@@ -170,6 +172,11 @@ impl FileItemBuilder {
         self
     }
 
+    pub fn show_folder_stats(mut self, v: bool) -> Self {
+        self.show_folder_stats = v;
+        self
+    }
+
     pub fn is_foreign_owner(mut self, v: bool) -> Self {
         self.is_foreign_owner = v;
         self
@@ -241,6 +248,9 @@ impl FileItemBuilder {
             mode: self.mode,
             uid: self.uid,
             created: self.created,
+            folder_previews: Vec::new(),
+            folder_stats: None,
+            show_folder_stats: self.show_folder_stats,
             grid_idx: self.grid_idx,
             max_width_chars: self.max_width_chars,
             grid_spacing: self.grid_spacing,

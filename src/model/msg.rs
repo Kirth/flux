@@ -662,6 +662,15 @@ pub enum AppMsg {
     /// The content search walk finished (or was cancelled). Used to clear the
     /// loading indicator and select the first result.
     ContentSearchDone { session: u64 },
+    /// Media thumbnails and size/type stats for the folder at `grid_idx`'s icon.
+    FolderInfoReady {
+        grid_idx: u32,
+        path: std::path::PathBuf,
+        previews: Vec<gdk::Texture>,
+        stats: Option<crate::services::thumbnails::FolderStats>,
+        load_id: u64,
+        tab_index: usize,
+    },
     ThumbnailReady {
         grid_idx: u32,
         texture: gdk::Texture,

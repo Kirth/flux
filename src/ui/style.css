@@ -492,6 +492,14 @@ gridview child {
   margin: 0px;
 }
 
+/* The selection ring on .flux-card already marks the focused item; GTK's focus
+   outline would draw a second ring around it that lingers while it fades out. */
+gridview > child,
+gridview > child:focus,
+gridview > child:focus-visible {
+  outline: none;
+}
+
 .flux-card {
   background: none;
   border-radius: 1.2em;
@@ -1705,6 +1713,52 @@ toast button image {
 }
 
 /* ── git badges and headers ── */
+/* Folder weight: composition bar under the icon and a stats line under the name.
+   Category colours can be overridden by themes. */
+@define-color flux_cat_images #b48ead;
+@define-color flux_cat_video #d08770;
+@define-color flux_cat_audio #88c0d0;
+@define-color flux_cat_documents #ebcb8b;
+@define-color flux_cat_code #81a1c1;
+@define-color flux_cat_archives #bf616a;
+@define-color flux_cat_other alpha(@theme_fg_color, 0.35);
+
+.flux-folder-bar {
+  min-height: 4px;
+  border-radius: 2px;
+  background-color: alpha(@theme_fg_color, 0.08);
+  opacity: 0.65;
+}
+
+.flux-folder-bar.flux-folder-bar--mini {
+  min-height: 3px;
+  margin-top: 2px;
+}
+
+.flux-folder-bar-seg {
+  min-height: 4px;
+}
+
+.flux-cat-images { background-color: @flux_cat_images; }
+.flux-cat-video { background-color: @flux_cat_video; }
+.flux-cat-audio { background-color: @flux_cat_audio; }
+.flux-cat-documents { background-color: @flux_cat_documents; }
+.flux-cat-code { background-color: @flux_cat_code; }
+.flux-cat-archives { background-color: @flux_cat_archives; }
+.flux-cat-other { background-color: @flux_cat_other; }
+
+.flux-folder-stats {
+  font-size: 0.78em;
+  font-variant-numeric: tabular-nums;
+  color: alpha(@theme_fg_color, 0.5);
+}
+
+/* Folder icon previews: 2×2 thumbnails of media inside the folder. */
+.flux-folder-preview-cell {
+  border-radius: 3px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
 /* Corner badge on grid icons: symlink, broken symlink, empty folder. */
 .flux-file-emblem {
   font-size: 0.9em;

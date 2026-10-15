@@ -8,6 +8,7 @@ pub mod debug;
 pub mod inputs;
 pub mod keymap;
 pub mod list_columns;
+pub(crate) use components::apply_folder_info_to_cell;
 pub mod menu;
 pub mod panels;
 pub mod settings;

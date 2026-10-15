@@ -158,7 +158,18 @@ impl FileItem {
         preview_stack.set_visible_child_name("icon");
 
         // Detail cells (size, dates, type, ...) shown in list mode.
-        let (columns_box, column_labels) = crate::ui::list_columns::build_row_cells();
+        let (columns_box, column_labels, size_bar) = crate::ui::list_columns::build_row_cells();
+
+        // Grid mode: how full/heavy a folder is, by type.
+        let folder_bar = super::bind::build_composition_bar();
+        folder_bar.set_halign(gtk::Align::Center);
+        folder_bar.set_margin_top(4);
+        let folder_stats_label = gtk::Label::builder()
+            .halign(gtk::Align::Center)
+            .ellipsize(gtk::pango::EllipsizeMode::End)
+            .css_classes(["flux-folder-stats"])
+            .visible(false)
+            .build();
 
         // Corner badge on the icon marking symlinks, broken symlinks and empty folders.
         let file_emblem = gtk::Label::builder()
@@ -169,12 +180,37 @@ impl FileItem {
             .build();
         file_emblem.add_css_class("flux-file-emblem");
 
+        // 2×2 mini thumbnails of media inside a folder, drawn on the folder's front.
+        let folder_preview = gtk::Grid::builder()
+            .halign(gtk::Align::Fill)
+            .valign(gtk::Align::Fill)
+            .row_spacing(2)
+            .column_spacing(2)
+            .row_homogeneous(true)
+            .column_homogeneous(true)
+            .can_target(false)
+            .visible(false)
+            .css_classes(["flux-folder-preview"])
+            .build();
+        for i in 0..4 {
+            let picture = gtk::Picture::builder()
+                .content_fit(gtk::ContentFit::Cover)
+                .can_shrink(true)
+                .hexpand(true)
+                .vexpand(true)
+                .overflow(gtk::Overflow::Hidden)
+                .css_classes(["flux-folder-preview-cell"])
+                .build();
+            folder_preview.attach(&picture, i % 2, i / 2, 1, 1);
+        }
+
         let icon_overlay = gtk::Overlay::builder()
             .halign(gtk::Align::Center)
             .valign(gtk::Align::End)
             .vexpand(false)
             .child(&preview_stack)
             .build();
+        icon_overlay.add_overlay(&folder_preview);
         icon_overlay.add_overlay(&file_emblem);
 
         let git_badge = gtk::Label::builder()
@@ -408,13 +444,24 @@ impl FileItem {
 
         // Append the info label after the scroller so it sits on the far right
         // of the horizontal list row. In grid mode it is hidden.
+        card_box.insert_child_after(&folder_bar, Some(&icon_overlay));
+        card_box.insert_child_after(&folder_stats_label, Some(&label_scroller));
         card_box.append(&info_label);
         card_box.append(&columns_box);
+
+        let folder_info = super::widgets::FolderInfoWidgets {
+            preview: folder_preview,
+            bar: folder_bar,
+            stats_label: folder_stats_label,
+            size_label: column_labels[0].clone(),
+            size_bar,
+        };
 
         unsafe {
             root.set_data("preview_stack", preview_stack.clone());
             root.set_data("video_widget", video_widget.clone());
             root.set_data("icon_widget", icon_widget.clone());
+            root.set_data("folder_info", folder_info.clone());
         }
 
         (
@@ -426,6 +473,7 @@ impl FileItem {
                 preview_stack,
                 icon_overlay,
                 file_emblem,
+                folder_info,
                 columns_box,
                 column_labels,
                 lock_icon,
