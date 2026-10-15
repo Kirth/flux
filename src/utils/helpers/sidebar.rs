@@ -1,7 +1,7 @@
 //! Sidebar rebuilding and the right-side panel toggle.
 
 use crate::model::{AppMsg, FluxApp, RightPanelType};
-use crate::ui::{constants, SidebarPlace};
+use crate::ui::{constants, SidebarPlaceInit};
 use adw::prelude::*;
 use relm4::prelude::*;
 use std::path::PathBuf;
@@ -12,12 +12,13 @@ impl FluxApp {
         let mut guard = self.sidebar.guard();
         guard.clear();
 
-        let recents_place = || crate::ui::SidebarPlace {
+        let recents_place = || crate::ui::SidebarPlaceInit {
             name: crate::i18n::tr("Recents"),
             icon: "document-open-recent-symbolic".to_string(),
             path: std::path::PathBuf::from(crate::ui::constants::RECENT_URI),
             is_mount: false,
             is_section_label: false,
+            ..Default::default()
         };
 
         let get_xdg_name = |p: &PathBuf| {
@@ -29,57 +30,63 @@ impl FluxApp {
         //Core XDG Directories - Conditioned on show_xdg_dirs config
         if self.config.ui.show_xdg_dirs {
             if let Some(p) = dirs::home_dir() {
-                guard.push_back(SidebarPlace {
+                guard.push_back(SidebarPlaceInit {
                     name: get_xdg_name(&p),
                     icon: "user-home-symbolic".to_string(),
                     path: p,
                     is_mount: false,
                     is_section_label: false,
+                    ..Default::default()
                 });
             }
             if let Some(p) = dirs::desktop_dir() {
-                guard.push_back(SidebarPlace {
+                guard.push_back(SidebarPlaceInit {
                     name: get_xdg_name(&p),
                     icon: "user-desktop-symbolic".to_string(),
                     path: p,
                     is_mount: false,
                     is_section_label: false,
+                    ..Default::default()
                 });
             }
             if let Some(p) = dirs::download_dir() {
-                guard.push_back(SidebarPlace {
+                guard.push_back(SidebarPlaceInit {
                     name: get_xdg_name(&p),
                     icon: "folder-download-symbolic".to_string(),
                     path: p,
                     is_mount: false,
                     is_section_label: false,
+                    ..Default::default()
                 });
             }
             if let Some(p) = dirs::document_dir() {
-                guard.push_back(SidebarPlace {
+                guard.push_back(SidebarPlaceInit {
                     name: get_xdg_name(&p),
                     icon: "folder-documents-symbolic".to_string(),
                     path: p,
                     is_mount: false,
                     is_section_label: false,
+                    ..Default::default()
                 });
             }
             if let Some(p) = dirs::picture_dir() {
-                guard.push_back(SidebarPlace {
+                guard.push_back(SidebarPlaceInit {
                     name: get_xdg_name(&p),
                     icon: "folder-pictures-symbolic".to_string(),
                     path: p,
                     is_mount: false,
                     is_section_label: false,
+                    ..Default::default()
                 });
             }
             if let Some(p) = dirs::video_dir() {
-                guard.push_back(SidebarPlace {
+                guard.push_back(SidebarPlaceInit {
                     name: get_xdg_name(&p),
                     icon: "folder-videos-symbolic".to_string(),
                     path: p,
                     is_mount: false,
                     is_section_label: false,
+                    ..Default::default()
                 });
             }
         }
@@ -92,12 +99,13 @@ impl FluxApp {
                 guard.push_back(recents_place());
             }
             if custom.kind.as_deref() == Some("label") {
-                guard.push_back(SidebarPlace {
+                guard.push_back(SidebarPlaceInit {
                     name: custom.name.clone(),
                     icon: String::new(),
                     path: PathBuf::new(),
                     is_mount: false,
                     is_section_label: true,
+                    ..Default::default()
                 });
                 continue;
             }
@@ -118,18 +126,23 @@ impl FluxApp {
                 name = crate::i18n::tr("Tags");
             }
 
-            guard.push_back(SidebarPlace {
+            guard.push_back(SidebarPlaceInit {
                 name,
                 icon: custom.icon.clone(),
                 path,
                 is_mount: false,
                 is_section_label: false,
+                ..Default::default()
             });
         }
 
         if show_recents && recents_row >= self.config.sidebar.len() {
             guard.push_back(recents_place());
         }
+        drop(guard);
+
+        self.restore_sidebar_expansion(0);
+        self.sync_sidebar_selection();
 
         // Mounts - Offloaded to background thread to prevent blocking the UI loop
         if let Some(sender) = crate::model::SENDER.get().cloned() {

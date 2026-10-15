@@ -3,7 +3,7 @@ use crate::ui::keymap::KeyMap;
 use crate::ui::{FileItem, SidebarPlace};
 use relm4::factory::FactoryVecDeque;
 use relm4::typed_view::grid::TypedGridView;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
@@ -136,6 +136,10 @@ pub struct FluxApp {
     pub files: TypedGridView<FileItem, gtk::MultiSelection>,
     /// Factory-managed collection of sidebar navigation entries.
     pub sidebar: FactoryVecDeque<SidebarPlace>,
+    /// Sidebar tree nodes the user has expanded during this session.
+    pub sidebar_expanded: HashSet<PathBuf>,
+    /// Folder the sidebar tree is currently auto-expanding towards.
+    pub sidebar_reveal_target: Option<PathBuf>,
     /// The current directory being browsed.
     pub current_path: PathBuf,
     /// Backwards navigation history.

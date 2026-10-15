@@ -4,6 +4,12 @@ pub struct FileWidgets {
     pub icon_widget: gtk::Image,
     pub video_widget: gtk::Video,
     pub preview_stack: gtk::Stack,
+    /// Wraps `preview_stack` so `file_emblem` can sit on the icon's corner.
+    pub icon_overlay: gtk::Overlay,
+    pub file_emblem: gtk::Label,
+    /// List-mode detail cells, one label per `list_columns::ListColumn` in order.
+    pub columns_box: gtk::Box,
+    pub column_labels: Vec<gtk::Label>,
     pub lock_icon: gtk::Image,
     pub label: gtk::Label,
     pub stack: gtk::Stack,

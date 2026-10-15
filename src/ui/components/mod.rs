@@ -9,5 +9,9 @@ mod setup;
 mod sidebar;
 mod widgets;
 
+pub(crate) use bind::restyle_clipboard_marks;
 pub use file_item::FileItem;
-pub use sidebar::{SidebarMsg, SidebarPlace};
+pub use sidebar::{
+    best_ancestor_root, is_virtual_sidebar_path, list_sidebar_children, SidebarChild, SidebarMsg,
+    SidebarPlace, SidebarPlaceInit,
+};

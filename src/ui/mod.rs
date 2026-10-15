@@ -7,6 +7,7 @@
 pub mod debug;
 pub mod inputs;
 pub mod keymap;
+pub mod list_columns;
 pub mod menu;
 pub mod panels;
 pub mod settings;
@@ -34,7 +35,10 @@ mod properties;
 
 // --- 3. Public Re-exports ---
 // This allows main.rs to call `ui::FluxApp`
-pub use components::{FileItem, SidebarPlace};
+pub use components::{
+    best_ancestor_root, is_virtual_sidebar_path, list_sidebar_children, FileItem, SidebarChild,
+    SidebarPlace, SidebarPlaceInit,
+};
 pub use help::HelpWindow;
 pub use properties::FileProperties;
 
@@ -74,6 +78,10 @@ pub mod constants {
     pub const RECENT_STACK_CAPACITY: usize = 10;
     pub const MAX_RECENT_ITEMS: usize = 9;
     pub const SIDEBAR_SPACING: i32 = 18;
+    /// Horizontal indentation per tree level in the sidebar.
+    pub const SIDEBAR_INDENT: i32 = 14;
+    /// Gap between a sidebar row's expander chevron and its icon.
+    pub const SIDEBAR_EXPANDER_SPACING: i32 = 4;
     pub const HEADER_BTN_SPACING: i32 = 6;
     pub const STATUS_ICON_SPACING: i32 = 8;
     pub const HEADER_MARGIN_END: i32 = 12;

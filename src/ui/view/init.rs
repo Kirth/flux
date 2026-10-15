@@ -16,6 +16,12 @@ impl FluxApp {
         sender: &AsyncComponentSender<Self>,
     ) {
         widgets.toolbar_view.add_top_bar(&model.tab_bar);
+        crate::ui::list_columns::init_from_config(&model.config.ui);
+        widgets
+            .tab_view_container
+            .append(&crate::ui::list_columns::build_header(
+                sender.input_sender().clone(),
+            ));
         widgets.tab_view_container.append(&model.tab_view);
         if let Some(first_tab) = model.tabs.first() {
             Self::connect_tab_scroller(&first_tab.scroller, sender);
@@ -284,7 +290,10 @@ impl FluxApp {
             if let Some(widget) = gesture.widget() {
                 if widget
                     .pick(x, y, gtk::PickFlags::DEFAULT)
-                    .is_some_and(|picked| picked.is::<gtk::ListBoxRow>())
+                    .is_some_and(|picked| {
+                        picked.is::<gtk::ListBoxRow>()
+                            || picked.ancestor(gtk::ListBoxRow::static_type()).is_some()
+                    })
                 {
                     return;
                 }

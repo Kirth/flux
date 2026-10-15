@@ -234,6 +234,8 @@ path = "search://"
                         crate::services::constants::MAX_CONTENT_SEARCH_RESULTS,
                     lazy_thumbnails: false,
                     disable_drag_and_drop: false,
+                    list_columns: crate::model::UIConfig::default().list_columns,
+                    list_column_widths: Default::default(),
                     loader_batch_size: 50,
                     folder_cache_capacity: 3,
                     thumbnail_threads: 4,

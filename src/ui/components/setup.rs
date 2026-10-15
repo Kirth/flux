@@ -157,6 +157,26 @@ impl FileItem {
         preview_stack.add_named(&video_widget, Some("video"));
         preview_stack.set_visible_child_name("icon");
 
+        // Detail cells (size, dates, type, ...) shown in list mode.
+        let (columns_box, column_labels) = crate::ui::list_columns::build_row_cells();
+
+        // Corner badge on the icon marking symlinks, broken symlinks and empty folders.
+        let file_emblem = gtk::Label::builder()
+            .halign(gtk::Align::End)
+            .valign(gtk::Align::End)
+            .can_target(false)
+            .visible(false)
+            .build();
+        file_emblem.add_css_class("flux-file-emblem");
+
+        let icon_overlay = gtk::Overlay::builder()
+            .halign(gtk::Align::Center)
+            .valign(gtk::Align::End)
+            .vexpand(false)
+            .child(&preview_stack)
+            .build();
+        icon_overlay.add_overlay(&file_emblem);
+
         let git_badge = gtk::Label::builder()
             .halign(gtk::Align::End)
             .valign(gtk::Align::Start)
@@ -332,7 +352,7 @@ impl FileItem {
                         }
                     },
 
-                    append: &preview_stack,
+                    append: &icon_overlay,
 
                     #[name = "label_scroller"]
                     gtk::ScrolledWindow {
@@ -389,10 +409,12 @@ impl FileItem {
         // Append the info label after the scroller so it sits on the far right
         // of the horizontal list row. In grid mode it is hidden.
         card_box.append(&info_label);
+        card_box.append(&columns_box);
 
         unsafe {
             root.set_data("preview_stack", preview_stack.clone());
             root.set_data("video_widget", video_widget.clone());
+            root.set_data("icon_widget", icon_widget.clone());
         }
 
         (
@@ -402,6 +424,10 @@ impl FileItem {
                 icon_widget,
                 video_widget,
                 preview_stack,
+                icon_overlay,
+                file_emblem,
+                columns_box,
+                column_labels,
                 lock_icon,
                 label,
                 stack,

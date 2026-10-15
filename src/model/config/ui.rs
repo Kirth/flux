@@ -209,6 +209,17 @@ pub struct UIConfig {
     /// When true, drag-and-drop operations for files and folders are completely disabled.
     #[serde(default)]
     pub disable_drag_and_drop: bool,
+    /// Detail columns shown in list view, besides Name (keys: size, modified, created,
+    /// type, owner, permissions). Display order is fixed; unknown keys are ignored.
+    #[serde(default = "default_list_columns")]
+    pub list_columns: Vec<String>,
+    /// User-resized list view column widths in pixels, keyed like `list_columns`.
+    #[serde(default)]
+    pub list_column_widths: std::collections::BTreeMap<String, i32>,
+}
+
+fn default_list_columns() -> Vec<String> {
+    ["size", "modified", "type"].map(String::from).to_vec()
 }
 
 impl Default for UIConfig {
@@ -254,6 +265,8 @@ impl Default for UIConfig {
             max_content_search_results: crate::services::constants::MAX_CONTENT_SEARCH_RESULTS,
             lazy_thumbnails: false,
             disable_drag_and_drop: false,
+            list_columns: default_list_columns(),
+            list_column_widths: Default::default(),
             loader_batch_size: default_loader_batch_size(),
             folder_cache_capacity: default_folder_cache_capacity(),
             thumbnail_threads: default_thumbnail_threads(),

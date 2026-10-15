@@ -33,6 +33,12 @@ pub struct FileItem {
     // In the FileItem struct, add after `is_custom_icon`:
     /// Unix timestamp of the last modification time, `0` when unavailable.
     pub mtime: i64,
+    /// Unix mode bits (type + permissions), `0` when unavailable.
+    pub mode: u32,
+    /// Owner uid, `None` when unavailable (search results, remote entries).
+    pub uid: Option<u32>,
+    /// Unix timestamp of the creation (birth) time, `0` when unavailable.
+    pub created: i64,
     /// Position of this item in the grid model.
     ///
     /// Set at construction time in `loader.rs` and read by `bind()` to dispatch

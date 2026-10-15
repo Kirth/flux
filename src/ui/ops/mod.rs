@@ -10,6 +10,7 @@ pub mod file;
 mod git;
 mod remote;
 mod sidebar;
+mod sidebar_tree;
 mod tag;
 mod task;
 mod terminal;

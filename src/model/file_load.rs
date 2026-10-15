@@ -157,6 +157,23 @@ impl FileLoadContext {
         })
     }
 
+    /// Unix mode bits, owner uid and creation time for the list view's detail columns.
+    ///
+    /// Reuses the cached metadata, so this adds no syscalls once size/mtime were read.
+    pub fn stat_details(&self) -> (u32, Option<u32>, i64) {
+        use std::os::unix::fs::MetadataExt;
+        let Some(m) = self.metadata() else {
+            return (0, None, 0);
+        };
+        let created = m
+            .created()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        (m.mode(), Some(m.uid()), created)
+    }
+
     /// Resolves foreign owner flag lazily on first access.
     #[inline]
     pub fn is_foreign_owner(&self, current_uid: u32) -> bool {

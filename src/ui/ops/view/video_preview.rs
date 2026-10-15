@@ -48,6 +48,23 @@ impl FluxApp {
         search(active_view.as_ref(), path)
     }
 
+    /// The icon image of a grid cell found by [`Self::find_widget_by_path`].
+    ///
+    /// Previews play as this image's paintable, so they occupy exactly the thumbnail's
+    /// box. A separate `gtk::Video` would size itself to the video's resolution and
+    /// reflow the whole grid.
+    fn preview_image(cell: &gtk::Widget) -> Option<gtk::Image> {
+        // SAFETY: "icon_widget" is only ever set to a gtk::Image, in the item setup.
+        unsafe {
+            cell.data::<gtk::Image>("icon_widget")
+                .map(|p| p.as_ref().clone())
+        }
+    }
+
+    fn playing_stream(image: &gtk::Image) -> Option<gtk::MediaStream> {
+        image.paintable().and_downcast::<gtk::MediaStream>()
+    }
+
     pub fn stop_video_preview(&mut self) {
         if let Some(source_id) = self.video_preview_source.take() {
             source_id.remove();
@@ -58,15 +75,14 @@ impl FluxApp {
         };
 
         if let Some(widget) = self.find_widget_by_path(&active_path) {
-            unsafe {
-                if let Some(video_ptr) = widget.data::<gtk::Video>("video_widget") {
-                    let video = video_ptr.as_ref();
-                    if let Some(stream) = video.media_stream() {
-                        stream.pause();
-                    }
-                }
-                if let Some(stack_ptr) = widget.data::<gtk::Stack>("preview_stack") {
-                    stack_ptr.as_ref().set_visible_child_name("icon");
+            if let Some(image) = Self::preview_image(&widget) {
+                if let Some(stream) = Self::playing_stream(&image) {
+                    stream.pause();
+                    // SAFETY: "preview_restore" is only ever set to Option<gdk::Paintable>.
+                    let restore = unsafe {
+                        widget.steal_data::<Option<gtk::gdk::Paintable>>("preview_restore")
+                    };
+                    image.set_paintable(restore.flatten().as_ref());
                 }
             }
         }
@@ -106,12 +122,8 @@ impl FluxApp {
         if self.active_video_preview.as_ref() == Some(&selected_path) {
             let still_playing = self
                 .find_widget_by_path(&selected_path)
-                .map(|w| unsafe {
-                    w.data::<gtk::Video>("video_widget")
-                        .map(|ptr| ptr.as_ref().media_stream().is_some())
-                        .unwrap_or(false)
-                })
-                .unwrap_or(false);
+                .and_then(|w| Self::preview_image(&w))
+                .is_some_and(|image| Self::playing_stream(&image).is_some());
 
             if still_playing {
                 return;
@@ -212,25 +224,26 @@ impl FluxApp {
         };
 
         if let Some(child) = self.find_widget_by_path(&path) {
+            let Some(image) = Self::preview_image(&child) else {
+                return;
+            };
             let media_file = gtk::MediaFile::for_file(&gfile);
             media_file.set_muted(true);
             media_file.set_loop(true);
 
-            unsafe {
-                if let Some(video_ptr) = child.data::<gtk::Video>("video_widget") {
-                    let video = video_ptr.as_ref();
-                    if let Some(old_stream) = video.media_stream() {
-                        old_stream.pause();
-                    }
-                    video.set_autoplay(true);
-                    video.set_loop(true);
-                    video.set_media_stream(Some(&media_file));
-                }
-                if let Some(stack_ptr) = child.data::<gtk::Stack>("preview_stack") {
-                    stack_ptr.as_ref().set_visible_child_name("video");
+            // Keep the thumbnail so stopping the preview can put it back.
+            if let Some(old_stream) = Self::playing_stream(&image) {
+                old_stream.pause();
+            } else {
+                // SAFETY: read back with the same type in `stop_video_preview` / unbind.
+                unsafe {
+                    child.set_data::<Option<gtk::gdk::Paintable>>(
+                        "preview_restore",
+                        image.paintable(),
+                    );
                 }
             }
-
+            image.set_paintable(Some(&media_file));
             media_file.play();
         }
     }

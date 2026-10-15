@@ -45,6 +45,9 @@ pub(super) fn setup_config_watcher() {
                             crate::utils::helpers::load_custom_css();
                             crate::utils::helpers::load_custom_background_images();
                             crate::utils::config::invalidate_config_cache();
+                            crate::ui::list_columns::init_from_config(
+                                &crate::utils::load_config().ui,
+                            );
                             if let Some(app) = gio::Application::default() {
                                 app.activate_action("reload-sidebar", None);
                             }

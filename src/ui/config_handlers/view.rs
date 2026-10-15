@@ -28,6 +28,8 @@ impl FluxApp {
         //WARNING: DO NOT REMOVE THE clear(). The folder cache stores pre-filtered items (dotfiles excluded at load time),
         // so toggling visibility without clearing it causes Ctrl+H to have no effect.
         self.folder_cache.clear();
+        // Rebuild so expanded sidebar tree nodes re-list with the new dot-folder filter.
+        self.refresh_sidebar();
         sender.input(AppMsg::Refresh);
     }
 

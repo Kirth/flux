@@ -1,29 +1,33 @@
 use crate::model::{AppMsg, FluxApp};
 use adw::prelude::*;
 use relm4::prelude::*;
+use std::collections::HashSet;
+use std::path::PathBuf;
 
 impl FluxApp {
     /// Handles clipboard Copy and Cut actions by populating standard GTK Clipboard providers.
     pub fn handle_copy_or_cut(&mut self, is_cut: bool, sender: &AsyncComponentSender<Self>) {
         self.handle_clipboard_action(is_cut);
 
-        let selection = self.get_selection();
-        for tab in &mut self.tabs {
-            for i in (0..tab.files.len()).rev() {
+        // Update the marks in place: removing/re-inserting the selected items would make
+        // GTK drop the focused item and scroll the view back to the top.
+        let selection: HashSet<PathBuf> = self.get_selection().into_iter().collect();
+        let none = HashSet::new();
+        let (cut, copy) = if is_cut {
+            (&selection, &none)
+        } else {
+            (&none, &selection)
+        };
+        for tab in &self.tabs {
+            for i in 0..tab.files.len() {
                 if let Some(wrapper) = tab.files.get(i) {
-                    let mut item = wrapper.borrow().clone();
+                    let mut item = wrapper.borrow_mut();
                     let is_selected = selection.contains(&item.path);
-                    let should_be_cut = is_cut && is_selected;
-                    let should_be_copy = !is_cut && is_selected;
-
-                    if item.is_cut != should_be_cut || item.is_copy != should_be_copy {
-                        item.is_cut = should_be_cut;
-                        item.is_copy = should_be_copy;
-                        tab.files.remove(i);
-                        tab.files.insert(i, item);
-                    }
+                    item.is_cut = is_cut && is_selected;
+                    item.is_copy = !is_cut && is_selected;
                 }
             }
+            crate::ui::components::restyle_clipboard_marks(&tab.files.view, cut, copy);
         }
 
         let cmd = if is_cut {
@@ -39,6 +43,43 @@ impl FluxApp {
         {
             sender.input(AppMsg::ShowToast(toast));
         }
+    }
+
+    /// Cancels a pending cut: clears the cut marks and, if flux still owns the clipboard,
+    /// empties it so a later paste cannot move the files. Copy marks are left alone.
+    /// Returns whether there was a cut to cancel.
+    pub fn handle_cancel_cut(&mut self) -> bool {
+        let mut had_cut = false;
+        for tab in &self.tabs {
+            for i in 0..tab.files.len() {
+                if let Some(wrapper) = tab.files.get(i) {
+                    let mut item = wrapper.borrow_mut();
+                    had_cut |= item.is_cut;
+                    item.is_cut = false;
+                }
+            }
+        }
+        if !had_cut {
+            return false;
+        }
+
+        let none = HashSet::new();
+        for tab in &self.tabs {
+            let copy: HashSet<PathBuf> = (0..tab.files.len())
+                .filter_map(|i| tab.files.get(i))
+                .filter(|w| w.borrow().is_copy)
+                .map(|w| w.borrow().path.clone())
+                .collect();
+            crate::ui::components::restyle_clipboard_marks(&tab.files.view, &none, &copy);
+        }
+
+        if let Some(display) = gtk::gdk::Display::default() {
+            let clipboard = display.clipboard();
+            if clipboard.is_local() {
+                let _ = clipboard.set_content(None::<&gtk::gdk::ContentProvider>);
+            }
+        }
+        true
     }
 
     /// Copies the absolute paths of selected items to the clipboard.

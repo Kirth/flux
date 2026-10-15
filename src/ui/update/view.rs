@@ -9,6 +9,9 @@ pub(super) fn handle(
     match msg {
         AppMsg::SelectionChanged { tab_id } => app.handle_selection_changed(tab_id, sender),
         AppMsg::ToggleListMode => app.handle_toggle_list_mode(),
+        AppMsg::SortByColumn(sort) => app.handle_sort_by_column(sort, sender),
+        AppMsg::ToggleListColumn(key) => app.handle_toggle_list_column(&key),
+        AppMsg::SetListColumnWidth(key, px) => app.handle_set_list_column_width(key, px),
         AppMsg::ToggleSortOrder => app.handle_toggle_sort_order(sender),
         AppMsg::CycleSort => app.handle_cycle_sort(sender),
         AppMsg::CycleFolderPriority => app.handle_cycle_folder_priority(sender),

@@ -167,6 +167,7 @@ impl SimpleAsyncComponent for FluxApp {
                             /// Interactive breadcrumb container for directory parent navigation.
                             #[name = "path_entry"]
                             add_child = &gtk::ScrolledWindow {
+                                add_css_class: "flux-breadcrumb-scroller",
                                 set_propagate_natural_width: false,
                                 set_min_content_width: constants::SCROLLED_WINDOW_MIN_WIDTH,
                                 set_hscrollbar_policy: gtk::PolicyType::External,
@@ -514,8 +515,9 @@ impl SimpleAsyncComponent for FluxApp {
                             add_css_class: "flat",
                             connect_realize => |w| FluxApp::set_cursor_pointer(w.as_ref(), true),
                             #[wrap(Some)]
-                            set_popover: main_menu_popover = &gtk::PopoverMenu::from_model(
-                                Option::<&gtk::gio::MenuModel>::None,
+                            set_popover: main_menu_popover = &gtk::PopoverMenu::from_model_full(
+                                &gtk::gio::Menu::new(),
+                                gtk::PopoverMenuFlags::NESTED,
                             ) {
                                 set_has_arrow: false,
                             }

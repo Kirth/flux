@@ -1,5 +1,5 @@
 use crate::model::{AppMsg, FluxApp};
-use crate::ui::SidebarPlace;
+use crate::ui::SidebarPlaceInit;
 use crate::utils;
 use adw::gio;
 use adw::gio::prelude::*;
@@ -22,69 +22,28 @@ impl FluxApp {
                 Self::expand_path(&place.path)
             };
 
-            self.sidebar.guard().push_back(crate::ui::SidebarPlace {
+            self.sidebar.guard().push_back(crate::ui::SidebarPlaceInit {
                 name: place.name.clone(),
                 icon: place.icon.clone(),
                 path,
                 is_mount: false,
                 is_section_label: is_label,
+                ..Default::default()
             });
         }
         self.refresh_sidebar();
     }
 
-    /// Immediately selects the sidebar row matching `current_path`, without waiting
-    /// for the folder load to complete. This prevents the hover animation from
-    /// staying active during slow directory loads (e.g. 500 wallpapers).
-    pub fn sync_sidebar_selection(&self) {
-        let listbox = match self.sidebar.widget().downcast_ref::<gtk::ListBox>() {
-            Some(lb) => lb.clone(),
-            None => return,
-        };
-
-        let current = &self.current_path;
-
-        let mut match_idx: Option<i32> = None;
-        for i in 0..self.sidebar.len() {
-            if let Some(place) = self.sidebar.get(i) {
-                if place.is_section_label {
-                    continue;
-                }
-                if &place.path == current {
-                    match_idx = Some(i as i32);
-                    break;
-                }
-                if let (Ok(a), Ok(b)) = (place.path.canonicalize(), current.canonicalize()) {
-                    if a == b {
-                        match_idx = Some(i as i32);
-                        break;
-                    }
-                }
-            }
-        }
-
-        match match_idx {
-            Some(idx) => {
-                if let Some(row) = listbox.row_at_index(idx) {
-                    listbox.select_row(Some(&row));
-                }
-            }
-            None => {
-                listbox.unselect_all();
-            }
-        }
-    }
-
     pub fn handle_system_mounts_ready(&mut self, mounts: Vec<(String, std::path::PathBuf)>) {
         let mut guard = self.sidebar.guard();
 
-        // Remove existing mount items from the back to maintain index stability
-        let mut idx = guard.len();
-        while idx > 0 {
-            idx -= 1;
-            if guard.get(idx).map(|p| p.is_mount).unwrap_or(false) {
-                guard.remove(idx);
-            }
+        // Mounts are always appended last, so drop the first mount root and everything after
+        // it (including any expanded subfolders), removing from the back for index stability.
+        let first_mount = (0..guard.len())
+            .find(|&i| guard.get(i).is_some_and(|p| p.is_mount && p.depth == 0))
+            .unwrap_or(guard.len());
+        while guard.len() > first_mount {
+            guard.pop_back();
         }
 
         let home = dirs::home_dir().unwrap_or_default();
@@ -129,14 +88,19 @@ impl FluxApp {
                 icon = "folder-remote-symbolic".to_string();
             }
 
-            guard.push_back(SidebarPlace {
+            guard.push_back(SidebarPlaceInit {
                 name,
                 icon,
                 path,
                 is_mount: true,
                 is_section_label: false,
+                ..Default::default()
             });
         }
+        drop(guard);
+
+        self.restore_sidebar_expansion(first_mount);
+        self.sync_sidebar_selection();
     }
 
     /// Removes a custom location from the sidebar configuration.

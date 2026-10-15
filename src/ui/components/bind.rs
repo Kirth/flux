@@ -24,7 +24,105 @@ fn format_size(bytes: u64) -> String {
     }
 }
 
+/// Applies the cut/copy clipboard styling to a bound item's root and card.
+pub(crate) fn apply_clipboard_classes(
+    root: &gtk::Widget,
+    card_box: &gtk::Widget,
+    is_cut: bool,
+    is_copy: bool,
+) {
+    for (class, on) in [("flux-card--cut", is_cut), ("flux-card--copy", is_copy)] {
+        for w in [root, card_box] {
+            if on {
+                w.add_css_class(class);
+            } else {
+                w.remove_css_class(class);
+            }
+        }
+    }
+}
+
+/// Restyles the on-screen items of `view` after the cut/copy marks changed.
+///
+/// Mutating the model instead (remove + insert) would make GTK drop the focused item
+/// and scroll back to the top. Rows bound later pick the marks up from their `FileItem`.
+pub(crate) fn restyle_clipboard_marks(
+    view: &gtk::GridView,
+    cut: &std::collections::HashSet<PathBuf>,
+    copy: &std::collections::HashSet<PathBuf>,
+) {
+    let mut next = view.first_child();
+    while let Some(list_item) = next {
+        next = list_item.next_sibling();
+        let Some(root) = list_item.first_child().and_downcast::<gtk::Overlay>() else {
+            continue;
+        };
+        // SAFETY: "flux_path" is only ever set to a PathBuf, in `bind_widgets`.
+        let Some(path) = (unsafe {
+            root.data::<PathBuf>("flux_path")
+                .map(|p| p.as_ref().clone())
+        }) else {
+            continue;
+        };
+        if let Some(card_box) = root.child() {
+            apply_clipboard_classes(
+                root.upcast_ref(),
+                &card_box,
+                cut.contains(&path),
+                copy.contains(&path),
+            );
+        }
+    }
+}
+
 impl FileItem {
+    /// Fills the list-mode detail cells and applies the shared column layout.
+    fn bind_list_columns(&self, widgets: &FileWidgets) {
+        use crate::ui::list_columns::{self as cols, ListColumn, MISSING};
+
+        for (col, cell) in ListColumn::ALL.iter().zip(&widgets.column_labels) {
+            let mut tooltip = None;
+            let text = match col {
+                ListColumn::Size if self.is_dir => {
+                    if self.size == 1 {
+                        tr("1 item")
+                    } else {
+                        format!("{} {}", self.size, tr("items"))
+                    }
+                }
+                ListColumn::Size => format_size(self.size),
+                ListColumn::Modified => {
+                    tooltip = cols::format_exact_date(self.mtime);
+                    cols::format_list_date(self.mtime).unwrap_or_else(|| MISSING.into())
+                }
+                ListColumn::Created => {
+                    tooltip = cols::format_exact_date(self.created);
+                    cols::format_list_date(self.created).unwrap_or_else(|| MISSING.into())
+                }
+                ListColumn::Type if self.is_symlink => {
+                    // Describe what the link points at, not the link's own name.
+                    let target = std::fs::canonicalize(&self.path).ok();
+                    let target_name = target
+                        .as_ref()
+                        .and_then(|t| t.file_name())
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| self.name.clone());
+                    let target_is_dir = target.as_ref().is_some_and(|t| t.is_dir());
+                    cols::type_description(&target_name, target_is_dir)
+                }
+                ListColumn::Type => cols::type_description(&self.name, self.is_dir),
+                ListColumn::Owner => self.uid.map_or_else(|| MISSING.into(), cols::owner_name),
+                ListColumn::Permissions => {
+                    cols::format_permissions(self.mode).unwrap_or_else(|| MISSING.into())
+                }
+            };
+            cell.set_label(&text);
+            cell.set_tooltip_text(tooltip.as_deref());
+        }
+        cols::apply_to_row(&widgets.columns_box);
+        widgets.columns_box.set_visible(true);
+    }
+
     /// Updates the item's widgets with current data from the [FileItem] model.
     ///
     /// Synchronizes labels, icons, thumbnails, and visibility states (e.g., rename entry).
@@ -32,21 +130,12 @@ impl FileItem {
         crate::hit!("bind");
         widgets.label.set_label(&self.display_label);
 
-        if self.is_cut {
-            root.add_css_class("flux-card--cut");
-            widgets.card_box.add_css_class("flux-card--cut");
-        } else {
-            root.remove_css_class("flux-card--cut");
-            widgets.card_box.remove_css_class("flux-card--cut");
-        }
-
-        if self.is_copy {
-            root.add_css_class("flux-card--copy");
-            widgets.card_box.add_css_class("flux-card--copy");
-        } else {
-            root.remove_css_class("flux-card--copy");
-            widgets.card_box.remove_css_class("flux-card--copy");
-        }
+        apply_clipboard_classes(
+            root.upcast_ref(),
+            widgets.card_box.upcast_ref(),
+            self.is_cut,
+            self.is_copy,
+        );
 
         if self.is_list_mode {
             crate::hit!("bind_layout_list");
@@ -58,7 +147,9 @@ impl FileItem {
             widgets.card_box.set_valign(gtk::Align::Center);
             widgets.card_box.set_hexpand(true);
             widgets.card_box.set_vexpand(false);
-            widgets.card_box.set_spacing(10);
+            widgets
+                .card_box
+                .set_spacing(crate::ui::list_columns::LIST_CELL_SPACING);
 
             widgets.icon_widget.set_pixel_size(self.icon_size);
             widgets
@@ -76,15 +167,19 @@ impl FileItem {
                 .set_size_request(self.icon_size, self.icon_size);
             widgets.preview_stack.set_valign(gtk::Align::Center);
             widgets.preview_stack.set_halign(gtk::Align::Start);
+            widgets.icon_overlay.set_valign(gtk::Align::Center);
+            widgets.icon_overlay.set_halign(gtk::Align::Start);
             widgets.preview_stack.set_visible_child_name("icon");
             widgets.label.set_halign(gtk::Align::Start);
             widgets.label.set_hexpand(true);
             widgets.label.set_justify(gtk::Justification::Left);
             widgets.label.set_width_chars(-1);
             widgets.label.set_max_width_chars(-1);
-            // Never wrap or ellipsize in list mode: the ScrolledWindow handles overflow.
+            // Long names ellipsize in the middle so the detail columns stay aligned.
             widgets.label.set_wrap(false);
-            widgets.label.set_ellipsize(gtk::pango::EllipsizeMode::None);
+            widgets
+                .label
+                .set_ellipsize(gtk::pango::EllipsizeMode::Middle);
 
             if let Some(ref old_provider) = widgets.scale_css_provider {
                 widgets.label.style_context().remove_provider(old_provider);
@@ -115,11 +210,10 @@ impl FileItem {
                 widgets.info_label.set_attributes(None);
             }
 
-            // In list mode the scroller provides horizontal scrolling so the row
-            // never grows wider than its allocated column width.
+            // The name fills whatever the detail columns leave; it never scrolls.
             widgets
                 .label_scroller
-                .set_hscrollbar_policy(gtk::PolicyType::Automatic);
+                .set_hscrollbar_policy(gtk::PolicyType::Never);
             widgets.label_scroller.set_propagate_natural_width(false);
             widgets.label_scroller.set_propagate_natural_height(true);
             widgets.label_scroller.set_valign(gtk::Align::Center);
@@ -146,85 +240,26 @@ impl FileItem {
             widgets.label_scroller.queue_resize();
             root.queue_resize();
 
-            // Populate the info label with item count, size, or left-aligned content search snippet.
-            {
-                crate::hit!("bind_info_label");
-                let mut info_parts: Vec<String> = Vec::new();
-
-                if let Some(ref snippet) = self.search_snippet {
-                    widgets.info_label.set_halign(gtk::Align::End);
-                    widgets.info_label.set_xalign(1.0);
-                    widgets.info_label.set_hexpand(false);
-                    if self.line_number > 0 {
-                        info_parts.push(format!("L:{}  {}", self.line_number, snippet));
-                    } else {
-                        info_parts.push(snippet.clone());
-                    }
+            crate::hit!("bind_info_label");
+            if let Some(ref snippet) = self.search_snippet {
+                // Content-search hits show their matching line instead of detail columns.
+                widgets.columns_box.set_visible(false);
+                widgets.info_label.set_halign(gtk::Align::End);
+                widgets.info_label.set_xalign(1.0);
+                widgets.info_label.set_hexpand(false);
+                widgets.info_label.set_tooltip_text(None::<&str>);
+                if self.line_number > 0 {
+                    widgets
+                        .info_label
+                        .set_label(&format!("L:{}  {}", self.line_number, snippet));
                 } else {
-                    widgets.info_label.set_halign(gtk::Align::End);
-                    widgets.info_label.set_xalign(1.0);
-                    widgets.info_label.set_hexpand(false);
-
-                    if self.is_dir {
-                        let count_str = if self.size == 1 {
-                            "1 item".to_string()
-                        } else {
-                            format!("{} {}", self.size, tr("items"))
-                        };
-                        info_parts.push(count_str);
-                    } else if self.size > 0 {
-                        info_parts.push(format_size(self.size));
-                    }
-
-                    if self.mtime > 0 {
-                        if let (Ok(file_dt), Ok(now_dt)) = (
-                            glib::DateTime::from_unix_local(self.mtime),
-                            glib::DateTime::now_local(),
-                        ) {
-                            let (f_y, f_m, f_d) =
-                                (file_dt.year(), file_dt.month(), file_dt.day_of_month());
-                            let (n_y, n_m, n_d) =
-                                (now_dt.year(), now_dt.month(), now_dt.day_of_month());
-
-                            let time_str = file_dt
-                                .format("%H:%M")
-                                .map(|g| g.to_string())
-                                .unwrap_or_default();
-
-                            if let Ok(exact) = file_dt.format("%x %X") {
-                                widgets.info_label.set_tooltip_text(Some(exact.as_str()));
-                            }
-
-                            if f_y == n_y && f_m == n_m && f_d == n_d {
-                                info_parts.push(format!("{}, {}", tr("Today"), time_str));
-                            } else {
-                                let is_yesterday = now_dt
-                                    .add_days(-1)
-                                    .map(|y_dt| {
-                                        y_dt.year() == f_y
-                                            && y_dt.month() == f_m
-                                            && y_dt.day_of_month() == f_d
-                                    })
-                                    .unwrap_or(false);
-
-                                if is_yesterday {
-                                    info_parts.push(format!("{}, {}", tr("Yesterday"), time_str));
-                                } else if let Ok(formatted) = file_dt.format("%x %H:%M") {
-                                    info_parts.push(formatted.to_string());
-                                }
-                            }
-                        }
-                    } else {
-                        widgets.info_label.set_tooltip_text(None::<&str>);
-                    }
+                    widgets.info_label.set_label(snippet);
                 }
-
-                if !info_parts.is_empty() {
-                    widgets.info_label.set_label(&info_parts.join(" · "));
-                    widgets.info_label.set_visible(true);
-                } else {
-                    widgets.info_label.set_visible(false);
-                }
+                widgets.info_label.set_visible(true);
+            } else {
+                widgets.info_label.set_visible(false);
+                widgets.columns_box.set_visible(false);
+                self.bind_list_columns(widgets);
             }
         } else {
             crate::hit!("bind_layout_grid");
@@ -244,6 +279,8 @@ impl FileItem {
             widgets.preview_stack.set_size_request(-1, -1);
             widgets.preview_stack.set_valign(gtk::Align::End);
             widgets.preview_stack.set_halign(gtk::Align::Center);
+            widgets.icon_overlay.set_valign(gtk::Align::End);
+            widgets.icon_overlay.set_halign(gtk::Align::Center);
             widgets.preview_stack.set_visible_child_name("icon");
             widgets.label.set_halign(gtk::Align::Center);
             widgets.label.set_hexpand(false);
@@ -359,6 +396,25 @@ impl FileItem {
         } else {
             root.remove_css_class("flux-card--empty");
             widgets.card_box.remove_css_class("flux-card--empty");
+        }
+
+        let emblem = if show_indicator && self.is_broken_symlink {
+            Some(("!", "flux-file-emblem--broken"))
+        } else if show_indicator {
+            Some(("↗", "flux-file-emblem--link"))
+        } else if self.is_dir && self.show_empty_dir_emblem && self.is_empty {
+            Some(("∅", "flux-file-emblem--empty"))
+        } else {
+            None
+        };
+        if let Some((glyph, class_name)) = emblem {
+            widgets.file_emblem.set_label(glyph);
+            widgets
+                .file_emblem
+                .set_css_classes(&["flux-file-emblem", class_name]);
+            widgets.file_emblem.set_visible(true);
+        } else {
+            widgets.file_emblem.set_visible(false);
         }
 
         crate::hit!("bind_git_badge");
@@ -566,22 +622,18 @@ impl FileItem {
     /// recycled widget cell can request its own thumbnail without being suppressed.
     pub(super) fn unbind_widgets(&mut self, widgets: &mut FileWidgets, root: &mut gtk::Overlay) {
         crate::hit!("unbind");
-        if let Some(stream) = widgets.video_widget.media_stream() {
+        // A video preview plays as the icon's paintable; stop it before the cell is reused,
+        // and forget the thumbnail it would restore (it belongs to the previous item).
+        if let Some(stream) = widgets
+            .icon_widget
+            .paintable()
+            .and_downcast::<gtk::MediaStream>()
+        {
             stream.pause();
-
-            let video_weak = widgets.video_widget.downgrade();
-            let stream_to_clear = stream.clone();
-            glib::timeout_add_local_once(std::time::Duration::from_millis(100), move || {
-                if let Some(video) = video_weak.upgrade() {
-                    if video
-                        .media_stream()
-                        .map(|s| s == stream_to_clear)
-                        .unwrap_or(false)
-                    {
-                        video.set_media_stream(None::<&gtk::MediaStream>);
-                    }
-                }
-            });
+        }
+        // SAFETY: "preview_restore" is only ever set to Option<gdk::Paintable>.
+        unsafe {
+            let _ = root.steal_data::<Option<gdk::Paintable>>("preview_restore");
         }
 
         if let Some(ref provider) = widgets.scale_css_provider {
@@ -601,6 +653,7 @@ impl FileItem {
 
         widgets.git_badge.set_visible(false);
         widgets.git_badge.set_css_classes(&["flux-git-badge"]);
+        widgets.file_emblem.set_visible(false);
 
         // Release the texture on both the widget and the item model
         widgets.icon_widget.set_paintable(None::<&gdk::Paintable>);

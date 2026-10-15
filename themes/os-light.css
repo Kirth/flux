@@ -125,6 +125,29 @@ headerbar togglebutton:active {
   background-color: transparent;
 }
 
+/* ── sidebar tree expander ── */
+.sidebar-row button.sidebar-expander {
+  min-width: 1.7em;
+  min-height: 1.7em;
+  padding: 0;
+  margin: 0 0 0 -0.95em;
+  border-radius: 0.4em;
+  background: transparent;
+  box-shadow: none;
+  opacity: 0.55;
+}
+
+.sidebar-row button.sidebar-expander:hover {
+  opacity: 1;
+  background-color: alpha(@theme_fg_color, 0.1);
+}
+
+.sidebar-row button.sidebar-expander image {
+  -gtk-icon-size: 1em;
+  min-width: 1em;
+  min-height: 1em;
+}
+
 .sidebar-row:not(.sidebar-section) {
   margin: 1px 14px;
   padding: 3px 14px;

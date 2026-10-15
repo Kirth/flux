@@ -57,6 +57,45 @@ impl FluxApp {
         sender.input(AppMsg::Refresh);
     }
 
+    /// List-view header click: sorts by `sort`, or flips the direction if already sorted by it.
+    pub fn handle_sort_by_column(&mut self, sort: SortBy, sender: &AsyncComponentSender<Self>) {
+        if self.sort_by == sort {
+            self.sort_ascending = !self.sort_ascending;
+        } else {
+            self.sort_by = sort;
+            self.sort_ascending = true;
+        }
+        let _ = self.state_db.save_view(
+            &self.current_path,
+            &format!("{:?}", self.sort_by),
+            !self.sort_ascending,
+            self.current_icon_size as u32,
+            self.config.ui.folders_first,
+        );
+        sender.input(AppMsg::Refresh);
+    }
+
+    /// Shows or hides a list-view detail column and persists the choice.
+    pub fn handle_toggle_list_column(&mut self, key: &str) {
+        use crate::ui::list_columns::{self, ListColumn};
+        let Some(col) = ListColumn::from_key(key) else {
+            return;
+        };
+        let visible = !list_columns::is_visible(col);
+        self.config.ui.list_columns.retain(|k| k != key);
+        if visible {
+            self.config.ui.list_columns.push(key.to_string());
+        }
+        utils::save_config(&self.config);
+        list_columns::set_visible(col, visible);
+    }
+
+    /// Persists a list-view column width after the user finished dragging it.
+    pub fn handle_set_list_column_width(&mut self, key: String, px: i32) {
+        self.config.ui.list_column_widths.insert(key, px);
+        utils::save_config(&self.config);
+    }
+
     /// Cycles through available sorting criteria (Name -> Date -> Size -> Type).
     pub fn handle_cycle_sort(&mut self, sender: &AsyncComponentSender<Self>) {
         self.sort_by = match self.sort_by {

@@ -27,6 +27,14 @@ pub(super) fn handle(
         AppMsg::RemoveSidebarSection(name) => app.handle_remove_sidebar_section(name),
         AppMsg::PromptNewSidebarSection => app.show_prompt_new_sidebar_section(sender),
         AppMsg::AddSidebarSection(title) => app.handle_add_sidebar_section(title),
+        AppMsg::SidebarToggleExpand(index) => app.handle_sidebar_toggle_expand(index),
+        AppMsg::SidebarExpand(index) => app.handle_sidebar_expand(index),
+        AppMsg::SidebarChildrenLoaded {
+            index,
+            parent,
+            children,
+        } => app.handle_sidebar_children_loaded(index, parent, children),
+        AppMsg::SidebarKeyNav { expand } => app.handle_sidebar_key_nav(expand),
         AppMsg::SidebarDropMove {
             source_paths,
             dest_path,

@@ -13,6 +13,7 @@ mod ui {
     mod init_components_test;
     mod inputs_test;
     mod keymap_test;
+    mod list_columns_test;
     mod location_dialog_test;
     mod menu_editor_test;
     mod navigation_test;

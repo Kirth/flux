@@ -94,6 +94,7 @@ impl FluxApp {
             let size = item.size();
             let mtime = item.mtime();
             let is_foreign_owner = item.is_foreign_owner(current_uid);
+            let stat_details = item.stat_details();
             let is_empty = if item.is_dir && self.config.ui.show_empty_dir_emblem {
                 item.is_empty()
             } else {
@@ -175,6 +176,7 @@ impl FluxApp {
                 .size(size)
                 .mtime(mtime)
                 .is_foreign_owner(is_foreign_owner)
+                .stat_details(stat_details)
                 .is_empty(is_empty)
                 .expand_labels(item.expand_labels)
                 .is_list_mode(is_list_mode)

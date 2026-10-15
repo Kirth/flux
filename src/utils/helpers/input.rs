@@ -140,8 +140,7 @@ impl FluxApp {
                 glib::Propagation::Stop
             }
             gdk::Key::Escape => {
-                sender.input(AppMsg::UpdateFilter(String::new()));
-                sender.input(AppMsg::SwitchHeader("path".to_string()));
+                sender.input(AppMsg::Escape);
                 glib::Propagation::Stop
             }
             gdk::Key::BackSpace => {

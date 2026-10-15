@@ -15,6 +15,9 @@ impl FileItem {
             is_dir: false,
             size: 0,
             mtime: 0,
+            mode: 0,
+            uid: None,
+            created: 0,
             icon_size: 32,
             is_list_mode: false,
             max_width_chars: 20,
@@ -49,6 +52,9 @@ pub struct FileItemBuilder {
     is_dir: bool,
     size: u64,
     mtime: i64,
+    mode: u32,
+    uid: Option<u32>,
+    created: i64,
     icon_size: i32,
     is_list_mode: bool,
     max_width_chars: i32,
@@ -156,6 +162,14 @@ impl FileItemBuilder {
         self
     }
 
+    /// Mode bits, owner uid and creation time, as returned by `FileLoadContext::stat_details`.
+    pub fn stat_details(mut self, (mode, uid, created): (u32, Option<u32>, i64)) -> Self {
+        self.mode = mode;
+        self.uid = uid;
+        self.created = created;
+        self
+    }
+
     pub fn is_foreign_owner(mut self, v: bool) -> Self {
         self.is_foreign_owner = v;
         self
@@ -224,6 +238,9 @@ impl FileItemBuilder {
             is_list_mode: self.is_list_mode,
             active_path: Rc::new(RefCell::new(None)),
             mtime: self.mtime,
+            mode: self.mode,
+            uid: self.uid,
+            created: self.created,
             grid_idx: self.grid_idx,
             max_width_chars: self.max_width_chars,
             grid_spacing: self.grid_spacing,

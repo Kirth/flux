@@ -13,6 +13,13 @@ pub(super) fn handle(
         AppMsg::CreateHardlink => app.handle_create_link(true, sender),
         AppMsg::Copy => app.handle_copy_or_cut(false, sender),
         AppMsg::Cut => app.handle_copy_or_cut(true, sender),
+        AppMsg::Escape => {
+            // Cancelling a cut must not also reload the folder (that drops the selection).
+            if !app.handle_cancel_cut() {
+                sender.input(AppMsg::UpdateFilter(String::new()));
+                sender.input(AppMsg::SwitchHeader("path".to_string()));
+            }
+        }
         AppMsg::Paste => app.handle_paste_from_clipboard(sender),
         AppMsg::PasteImageFromClipboard
         | AppMsg::PasteTextFromClipboard

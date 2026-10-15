@@ -36,7 +36,12 @@ impl FluxApp {
         // Resource Loading (config and menu awaited, the DB opens in the background)
         let (pending_db, config, menu_actions_list) = Self::load_resources().await;
 
-        let context_menu_popover = gtk::PopoverMenu::builder().has_arrow(false).build();
+        // NESTED: submenus pop out beside the menu on hover instead of sliding in on click.
+        let context_menu_popover = gtk::PopoverMenu::from_model_full(
+            &gtk::gio::Menu::new(),
+            gtk::PopoverMenuFlags::NESTED,
+        );
+        context_menu_popover.set_has_arrow(false);
 
         crate::utils::helpers::apply_ui_scale(config.ui.ui_scale);
 
@@ -176,6 +181,8 @@ impl FluxApp {
             terminal_cleared: false,
             terminal_paned: None,
             sidebar_visible: effective_sidebar_visible,
+            sidebar_expanded: Default::default(),
+            sidebar_reveal_target: None,
             sidebar_widget: Some(sidebar_root.upcast()),
             header_visible: effective_header_visible,
             header_widget: None,

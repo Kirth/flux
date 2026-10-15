@@ -43,6 +43,56 @@ pub fn apply_ui_scale(scale: f64) {
     }
 }
 
+/// Keeps flux's own surfaces (grid items, list header, header breadcrumbs, sidebar) free
+/// of backgrounds painted by a desktop-wide `~/.config/gtk-4.0/gtk.css`, e.g. generic
+/// `scrolledwindow`, `list, row` or `button` rules.
+///
+/// That file loads at USER priority, which outranks the app stylesheet regardless of
+/// selector specificity, so these resets ride along with the theme provider instead.
+/// Theme rules come after them and can still restyle these widgets.
+const SURFACE_RESET_CSS: &str = "
+gridview > child,
+gridview > child:selected,
+.flux-card stack,
+.flux-card image,
+.flux-card picture,
+.flux-label-scroller,
+.flux-label-scroller > viewport {
+  background: none;
+  box-shadow: none;
+}
+
+.flux-list-header button.flux-list-header-button {
+  background: none;
+  box-shadow: none;
+  border: none;
+}
+
+.flux-list-header button.flux-list-header-button:hover {
+  background-color: alpha(@theme_fg_color, 0.08);
+}
+
+.flux-breadcrumb-scroller,
+.flux-breadcrumb-scroller > viewport,
+.sidebar scrolledwindow,
+.sidebar viewport,
+.sidebar list,
+.sidebar list > row:not(:selected):not(:hover) {
+  background: none;
+  box-shadow: none;
+}
+
+.sidebar-row button.sidebar-expander {
+  background: none;
+  box-shadow: none;
+  border: none;
+}
+
+.sidebar-row button.sidebar-expander:hover {
+  background-color: alpha(@theme_fg_color, 0.1);
+}
+";
+
 /// Applies the theme CSS, then the user's style.css on top as overrides.
 pub fn load_custom_css() {
     crate::hit!("load_custom_css");
@@ -91,7 +141,10 @@ pub fn load_custom_css() {
         swap_css_provider(
             &ACTIVE_CSS_PROVIDER,
             &display,
-            theme_css.as_deref(),
+            Some(&format!(
+                "{SURFACE_RESET_CSS}\n{}",
+                theme_css.as_deref().unwrap_or("")
+            )),
             gtk::STYLE_PROVIDER_PRIORITY_USER,
         );
         // One step above the theme so overrides win regardless of load order.

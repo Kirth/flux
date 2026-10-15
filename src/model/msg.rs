@@ -590,6 +590,27 @@ pub enum AppMsg {
         before: PathBuf,
         label_name: Option<String>,
     },
+    /// Escape in the file view: cancels a pending Ctrl+X if there is one, otherwise clears
+    /// the filter and returns the header to the path bar.
+    Escape,
+    /// List-view header click: sort by this field, or flip direction if it is already active.
+    SortByColumn(SortBy),
+    /// Show or hide a list-view detail column (by `ListColumn::key`).
+    ToggleListColumn(String),
+    /// Persist a resized list-view column width (key, pixels).
+    SetListColumnWidth(String, i32),
+    /// Expand or collapse the sidebar tree row at `index`.
+    SidebarToggleExpand(relm4::factory::DynamicIndex),
+    /// Unfold the sidebar tree row at `index` if it is collapsed (row was clicked).
+    SidebarExpand(relm4::factory::DynamicIndex),
+    /// Left (`expand == false`) / Right arrow on the sidebar tree.
+    SidebarKeyNav { expand: bool },
+    /// Delivers the background-enumerated subfolders of an expanded sidebar row.
+    SidebarChildrenLoaded {
+        index: relm4::factory::DynamicIndex,
+        parent: PathBuf,
+        children: Vec<crate::ui::SidebarChild>,
+    },
     /// Move files dragged from the grid and dropped onto a non-folder sidebar row's target folder.
     SidebarDropMove {
         source_paths: Vec<PathBuf>,

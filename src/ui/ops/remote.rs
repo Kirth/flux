@@ -84,6 +84,7 @@ impl FluxApp {
                     .size(size)
                     .mtime(mtime)
                     .is_foreign_owner(is_foreign_owner)
+                    .stat_details(item.stat_details())
                     .is_empty(is_empty)
                     .expand_labels(item.expand_labels)
                     .is_list_mode(self.is_list_mode)

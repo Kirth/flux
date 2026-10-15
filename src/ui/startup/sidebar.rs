@@ -1,7 +1,7 @@
 use crate::model::{AppMsg, Config, FluxApp};
 use crate::ui::SidebarPlace;
 use adw::prelude::*;
-use gtk::gio;
+use gtk::{gdk, gio, glib};
 use relm4::factory::FactoryVecDeque;
 use relm4::prelude::*;
 
@@ -53,8 +53,32 @@ impl FluxApp {
                     current_name: name,
                 },
                 crate::ui::SidebarMsg::RemoveSection(name) => AppMsg::RemoveSidebarSection(name),
+                crate::ui::SidebarMsg::ToggleExpand(index) => AppMsg::SidebarToggleExpand(index),
+                crate::ui::SidebarMsg::Expand(index) => AppMsg::SidebarExpand(index),
+                crate::ui::SidebarMsg::Pin(path) => AppMsg::PinFolderAt {
+                    path,
+                    before: std::path::PathBuf::new(),
+                    label_name: None,
+                },
             },
         );
+
+        // Left/Right collapse and expand the selected tree row.
+        let tree_keys = gtk::EventControllerKey::new();
+        let sender_keys = sender.input_sender().clone();
+        tree_keys.connect_key_pressed(move |_, key, _, modifiers| {
+            if !modifiers.is_empty() {
+                return glib::Propagation::Proceed;
+            }
+            let expand = match key {
+                gdk::Key::Right => true,
+                gdk::Key::Left => false,
+                _ => return glib::Propagation::Proceed,
+            };
+            sender_keys.emit(AppMsg::SidebarKeyNav { expand });
+            glib::Propagation::Stop
+        });
+        listbox.add_controller(tree_keys);
 
         let volume_monitor = gio::VolumeMonitor::get();
         crate::ui::sidebar_network::connect_volume_monitor_signals(sender.input_sender().clone());
