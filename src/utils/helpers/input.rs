@@ -130,6 +130,13 @@ impl FluxApp {
 
         // Context Keys & Batch Execution
         match keyval {
+            // Alt+Enter: properties of the selection (or of the current folder)
+            gdk::Key::Return | gdk::Key::KP_Enter
+                if modifiers.contains(gdk::ModifierType::ALT_MASK) =>
+            {
+                sender.input(AppMsg::ShowProperties);
+                glib::Propagation::Stop
+            }
             // Triggers batch activation for the current selection
             gdk::Key::Return | gdk::Key::KP_Enter => {
                 sender.input(AppMsg::Activate);

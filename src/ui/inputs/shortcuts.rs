@@ -65,6 +65,7 @@ pub fn setup_global_shortcuts(
     bind_trigger!("<Primary><Shift>F7", AppMsg::OpenDebugWindow);
     bind_trigger!("F7", AppMsg::ToggleStatusBar);
     bind_trigger!("F8", AppMsg::ToggleSidebar);
+    bind_trigger!("<Primary>backslash", AppMsg::ToggleSplitView);
     bind_trigger!("F4", AppMsg::ToggleTerminal);
     bind_trigger!("<Primary>z", AppMsg::Undo);
     bind_trigger!("<Primary><Shift>z", AppMsg::Redo);

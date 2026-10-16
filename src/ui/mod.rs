@@ -73,9 +73,10 @@ pub mod constants {
     pub const MAX_HISTORY: usize = 100;
 
     // Layout Constraints
-    pub const SCROLLED_WINDOW_MIN_WIDTH: i32 = 480;
-    pub const LOCATION_ENTRY_WIDTH_REQUEST: i32 = 450;
-    pub const SEARCH_ENTRY_WIDTH_REQUEST: i32 = 450;
+    /// Header entries shrink to this many characters in narrow windows…
+    pub const HEADER_ENTRY_MIN_CHARS: i32 = 3;
+    /// …and grow to this many when there is room.
+    pub const HEADER_ENTRY_MAX_CHARS: i32 = 48;
     pub const RECENT_STACK_CAPACITY: usize = 10;
     pub const MAX_RECENT_ITEMS: usize = 9;
     pub const SIDEBAR_SPACING: i32 = 18;

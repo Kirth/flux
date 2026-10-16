@@ -55,7 +55,7 @@ impl FluxApp {
         };
 
         // Tab Container Initialization
-        let (tab_view, tab_bar, initial_tab) = {
+        let (tab_view, tab_bar, tab_view_right, tab_bar_right, initial_tab) = {
             crate::hit!("init_components:tabs");
             Self::build_tabs(start_path.clone(), &config, &sender)
         };
@@ -127,6 +127,11 @@ impl FluxApp {
             is_in_git_repo: false,
             tab_view,
             tab_bar,
+            tab_view_right,
+            tab_bar_right,
+            split_view: false,
+            pane_boxes: None,
+            panes_paned: None,
             tabs: vec![initial_tab],
             active_tab_index: 0,
             next_tab_id: 1,
@@ -181,6 +186,9 @@ impl FluxApp {
             terminal_cleared: false,
             terminal_paned: None,
             sidebar_visible: effective_sidebar_visible,
+            compact: false,
+            sidebar_auto_hidden: false,
+            sidebar_breakpoint: None,
             sidebar_expanded: Default::default(),
             sidebar_reveal_target: None,
             sidebar_widget: Some(sidebar_root.upcast()),

@@ -118,7 +118,13 @@ pub fn setup_capture(
                 if terminal_focused {
                     return glib::Propagation::Proceed;
                 }
-                sender.input(AppMsg::NextExclusive);
+                // Split view: Tab jumps to the other pane (commander style); otherwise it
+                // cycles the quick list.
+                if crate::ui::tabs::panes::split_active() && !is_editable {
+                    sender.input(AppMsg::SwitchPane);
+                } else {
+                    sender.input(AppMsg::NextExclusive);
+                }
                 glib::Propagation::Stop
             }
             gdk::Key::z if is_ctrl => {

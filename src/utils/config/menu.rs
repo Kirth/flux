@@ -40,8 +40,6 @@ pub fn ensure_config_file() -> PathBuf {
 "      Open Terminal" => "directory", "alacritty --working-directory=%p", "no_command_dialog"
 "󰋜      Toggle Pin" => "directory", "builtin::toggle_pin"
 "󰨞      Open in VSCode" => "text/all, application/all", "code %p", "no_command_dialog"
-"󰋽      File Properties" => "file", "flux-fm --file-properties %p", "no_command_dialog"
-"󰋊      Folder Info" => "directory", "baobab %p", "no_command_dialog"
 "󰉋      New Folder" => "directory", "builtin::new_folder"
 "󰈔      New File" => "directory", "builtin::new_file"
 

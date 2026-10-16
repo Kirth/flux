@@ -1,23 +1,34 @@
 use crate::model::{AppMsg, Config, FluxApp};
 use adw::prelude::*;
-use gtk::glib;
 use relm4::prelude::*;
 use std::path::PathBuf;
 
 impl FluxApp {
-    /// Builds the tab view, tab bar and the initial tab, wiring tab signals.
+    /// Builds both panes' tab views and strips (the right one stays empty until split
+    /// view is turned on) and the initial tab, wiring tab signals.
     pub(super) fn build_tabs(
         start_path: PathBuf,
         config: &Config,
         sender: &AsyncComponentSender<Self>,
-    ) -> (adw::TabView, adw::TabBar, crate::ui::TabState) {
+    ) -> (
+        adw::TabView,
+        adw::TabBar,
+        adw::TabView,
+        adw::TabBar,
+        crate::ui::TabState,
+    ) {
+        let new_bar = |view: &adw::TabView| {
+            adw::TabBar::builder()
+                .view(view)
+                .autohide(true)
+                .expand_tabs(false)
+                .css_classes(["inline", "flux-tab-bar"])
+                .build()
+        };
         let tab_view = adw::TabView::new();
-        let tab_bar = adw::TabBar::builder()
-            .view(&tab_view)
-            .autohide(true)
-            .expand_tabs(false)
-            .css_classes(["inline"])
-            .build();
+        let tab_bar = new_bar(&tab_view);
+        let tab_view_right = adw::TabView::new();
+        let tab_bar_right = new_bar(&tab_view_right);
 
         let mut initial_tab = crate::ui::TabState::new(
             1,
@@ -60,50 +71,27 @@ impl FluxApp {
 
         let initial_page = tab_view.append(&initial_tab.scroller);
         initial_page.set_title(&initial_tab.title);
+        initial_page.set_icon(Some(&gtk::gio::ThemedIcon::new("folder-symbolic")));
         unsafe {
             initial_page.set_data("flux_tab_id", tab_id);
         }
 
-        let s_tab_reorder = sender.clone();
-        tab_view.connect_page_reordered(move |_tv, page, new_position| {
-            let moved_id: u64 = unsafe {
-                page.data::<u64>("flux_tab_id")
-                    .map(|r| *r.as_ref())
-                    .unwrap_or(0)
-            };
-            s_tab_reorder.input(AppMsg::TabReordered {
-                moved_id,
-                new_position: new_position as usize,
-            });
-        });
+        use crate::ui::tabs::{panes::wire_tab_view, Pane};
+        wire_tab_view(&tab_view, &tab_bar, &tab_view_right, Pane::Left, sender);
+        wire_tab_view(
+            &tab_view_right,
+            &tab_bar_right,
+            &tab_view,
+            Pane::Right,
+            sender,
+        );
 
-        let s_tab_select = sender.clone();
-        tab_view.connect_selected_page_notify(move |tv| {
-            if let Some(selected_page) = tv.selected_page() {
-                let position = tv.page_position(&selected_page) as usize;
-                // Only request SwitchTab if the user clicked a different tab header
-                s_tab_select.input(AppMsg::SwitchTab(position));
-            }
-        });
-
-        tab_view.connect_close_page(move |tv, page| {
-            if tv.n_pages() <= 1 {
-                let app = gtk::Application::default();
-                if let Some(win) = app.active_window() {
-                    win.close();
-                }
-                return glib::Propagation::Stop;
-            }
-            // Let AdwTabView close and detach the page normally
-            tv.close_page_finish(page, true);
-            glib::Propagation::Stop
-        });
-
-        let s_tab_detached = sender.clone();
-        tab_view.connect_page_detached(move |_tv, _page, position| {
-            // Only notify our model AFTER the widget is fully detached
-            s_tab_detached.input(AppMsg::CloseTab(Some(position as usize)));
-        });
-        (tab_view, tab_bar, initial_tab)
+        (
+            tab_view,
+            tab_bar,
+            tab_view_right,
+            tab_bar_right,
+            initial_tab,
+        )
     }
 }

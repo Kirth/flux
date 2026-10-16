@@ -19,7 +19,7 @@ impl FactoryComponent for MetadataSection {
 
     view! {
         adw::PreferencesGroup {
-            set_title: &self.title,
+            set_title: &gtk::glib::markup_escape_text(&self.title),
             #[local_ref]
             add = rows_widget -> adw::PreferencesGroup,
         }

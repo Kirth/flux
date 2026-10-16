@@ -21,25 +21,45 @@ impl FluxApp {
         self.sync_list_view_chrome();
     }
 
-    /// Keeps the list-view header and the compact-row class in step with the active tab.
+    /// Keeps each pane's list-view header and compact-row class in step with the tab
+    /// that pane is showing (the active tab's live state is mirrored on `self`).
     fn sync_list_view_chrome(&self) {
-        let view = &self.tabs[self.active_tab_index].files;
-        if view.view.has_css_class("flux-list-mode") != self.is_list_mode {
-            if self.is_list_mode {
-                view.view.add_css_class("flux-list-mode");
+        use crate::ui::tabs::{panes::page_tab_id, Pane};
+        for (i, pane) in [Pane::Left, Pane::Right].into_iter().enumerate() {
+            let shown = self
+                .tab_view_for(pane)
+                .selected_page()
+                .and_then(|p| self.tab_index_by_id(page_tab_id(&p)));
+            let Some(index) = shown else {
+                crate::ui::list_columns::sync_header(i, false, self.sort_by, true);
+                continue;
+            };
+            let tab = &self.tabs[index];
+            let (list_mode, sort_by, ascending) = if index == self.active_tab_index {
+                (self.is_list_mode, self.sort_by, self.sort_ascending)
             } else {
-                view.view.remove_css_class("flux-list-mode");
+                (tab.is_list_mode, tab.sort_by, tab.sort_ascending)
+            };
+            let view = &tab.files;
+            if view.view.has_css_class("flux-list-mode") != list_mode {
+                if list_mode {
+                    view.view.add_css_class("flux-list-mode");
+                } else {
+                    view.view.remove_css_class("flux-list-mode");
+                }
             }
+            // Content-search hits show snippets instead of columns, so drop the header.
+            let showing_snippets = view
+                .get(0)
+                .is_some_and(|item| item.borrow().search_snippet.is_some());
+            let pane_shown = pane == Pane::Left || self.split_view;
+            crate::ui::list_columns::sync_header(
+                i,
+                pane_shown && list_mode && !showing_snippets,
+                sort_by,
+                ascending,
+            );
         }
-        // Content-search hits show snippets instead of columns, so drop the header there.
-        let showing_snippets = view
-            .get(0)
-            .is_some_and(|item| item.borrow().search_snippet.is_some());
-        crate::ui::list_columns::sync_header(
-            self.is_list_mode && !showing_snippets,
-            self.sort_by,
-            self.sort_ascending,
-        );
     }
 
     fn route_update(&mut self, mut message: AppMsg, sender: AsyncComponentSender<Self>) {

@@ -18,6 +18,8 @@ impl FactoryComponent for PropertyRow {
 
     view! {
         adw::ActionRow {
+            // Plain text: values like paths or "System & Disk" aren't markup.
+            set_use_markup: false,
             set_title: &self.key,
             set_subtitle: &self.value,
             set_activatable: true,

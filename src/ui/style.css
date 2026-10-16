@@ -218,8 +218,10 @@ windowcontrols button.maximize:hover {
 }
 
 .sidebar-row:not(.sidebar-section) {
-  margin: 0.1em 1em;
-  padding: 0.25em 1em;
+  margin: 0.1em 0.45em;
+  /* Left padding matches the expander's negative margin, so the chevron sits at the
+     row's left edge. */
+  padding: 0.25em 0.6em 0.25em 0.95em;
   min-height: 1.8em;
   border-radius: 0.75em;
   background-color: transparent;
@@ -1564,108 +1566,7 @@ tabbar undershoot.right {
   box-shadow: none;
 }
 
-tabbar tab {
-  min-height: 1.8em;
-  padding: 0.15em 0.8em;
-  margin: 0 0.15em;
-  border-radius: 0.6em;
-  background-color: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: none;
-  transition:
-    background-color 120ms ease,
-    border-color 120ms ease;
-}
-
-tabbar tab:hover {
-  background-color: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.22);
-}
-
-tabbar tab:checked,
-tabbar tab:selected,
-tabbar tab.selected {
-  background-color: #007aff;
-  background-image: linear-gradient(
-    to bottom,
-    rgba(255, 255, 255, 0.22) 0%,
-    rgba(0, 0, 0, 0.1) 100%
-  );
-  border: 1px solid rgba(0, 122, 255, 0.8);
-  border-top-color: rgba(255, 255, 255, 0.4);
-  box-shadow:
-    0 0.15em 0.6em rgba(0, 122, 255, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
-}
-
-tabbar tab:checked:hover,
-tabbar tab:selected:hover,
-tabbar tab.selected:hover {
-  background-color: #1a8cff;
-  background-image: linear-gradient(
-    to bottom,
-    rgba(255, 255, 255, 0.32) 0%,
-    rgba(0, 0, 0, 0.05) 100%
-  );
-}
-
-tabbar tab label {
-  font-family: var(--font-main);
-  font-size: 0.9em;
-  font-weight: 500;
-  color: alpha(@theme_fg_color, 0.65);
-}
-
-tabbar tab:hover label {
-  color: @theme_fg_color;
-}
-
-tabbar tab:checked label,
-tabbar tab:selected label,
-tabbar tab.selected label {
-  color: #ffffff;
-  font-weight: 700;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-}
-
-tabbar tab button.flat {
-  min-height: 1.2em;
-  min-width: 1.2em;
-  padding: 1px;
-  border-radius: 50%;
-  color: alpha(@theme_fg_color, 0.6);
-  opacity: 0.6;
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  transition:
-    opacity 120ms ease,
-    background-color 120ms ease;
-}
-
-tabbar tab:hover button.flat {
-  opacity: 1;
-  color: @theme_fg_color;
-}
-
-tabbar tab:checked button.flat,
-tabbar tab:selected button.flat,
-tabbar tab.selected button.flat {
-  color: #ffffff;
-  opacity: 0.9;
-}
-
-tabbar tab button.flat:hover {
-  background-color: rgba(255, 255, 255, 0.18);
-  color: #ffffff;
-}
-
-tabbar tab:checked button.flat:hover,
-tabbar tab:selected button.flat:hover,
-tabbar tab.selected button.flat:hover {
-  background-color: rgba(255, 255, 255, 0.3);
-  color: #ffffff;
-}
+/* Tab shapes are styled in the "tabs" section at the end of this file. */
 
 /* ── toast notifications ── */
 toastoverlay.quick-dock-active toast {
@@ -1920,4 +1821,109 @@ dropdown image {
   -gtk-icon-size: 1.15em;
   min-width: 1.15em;
   min-height: 1.15em;
+}
+
+/* ── compact (narrow window) layout ── */
+.flux-compact headerbar {
+  padding-left: 0.3em;
+  padding-right: 0.3em;
+}
+
+.flux-compact gridview,
+.flux-compact gridview.flux-list-mode {
+  padding-left: 0.4em;
+  padding-right: 0.4em;
+}
+
+/* Keep the list header aligned with the rows' reduced padding. */
+.flux-compact .flux-list-header {
+  margin-left: 0.4em;
+  margin-right: 0.4em;
+}
+
+.flux-compact .selection-status {
+  padding-left: 0.7em;
+  padding-right: 0.7em;
+}
+
+/* ── tabs: real tab shapes attached to the content below ── */
+tabbar.flux-tab-bar {
+  border-bottom: 1px solid alpha(@theme_fg_color, 0.08);
+}
+
+tabbar.flux-tab-bar .box {
+  padding: 0 8px;
+  background: none;
+  box-shadow: none;
+  border: none;
+}
+
+/* Sit the tabs on the content edge (libadwaita pads 6px below them). */
+tabbar.flux-tab-bar tabbox {
+  padding-top: 6px;
+  padding-bottom: 0;
+}
+
+/* libadwaita wraps each tab in a rounded, clipping child; square off its bottom and
+   drop its focus ring (the selected tab's accent already marks it). */
+tabbar.flux-tab-bar tabbox > tabboxchild {
+  border-radius: 8px 8px 0 0;
+}
+
+tabbar.flux-tab-bar tabbox > tabboxchild,
+tabbar.flux-tab-bar tabbox > tabboxchild:focus-within:focus-visible,
+tabbar.flux-tab-bar tab,
+tabbar.flux-tab-bar tab:focus-visible {
+  outline: none;
+}
+
+tabbar.flux-tab-bar tabbox > separator {
+  opacity: 0;
+}
+
+tabbar.flux-tab-bar tab {
+  min-height: 30px;
+  margin: 0 1px;
+  padding: 0 6px 0 10px;
+  border-radius: 8px 8px 0 0;
+  background-color: alpha(@theme_fg_color, 0.035);
+  box-shadow: none;
+  color: alpha(@theme_fg_color, 0.6);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+tabbar.flux-tab-bar tab:hover:not(:selected) {
+  background-color: alpha(@theme_fg_color, 0.07);
+  color: alpha(@theme_fg_color, 0.85);
+}
+
+tabbar.flux-tab-bar tab:selected {
+  background-color: alpha(@theme_fg_color, 0.1);
+  color: @theme_fg_color;
+  box-shadow: inset 0 2px @accent_color;
+}
+
+tabbar.flux-tab-bar tab:selected label {
+  font-weight: 600;
+}
+
+tabbar.flux-tab-bar tab image {
+  -gtk-icon-size: 14px;
+  opacity: 0.75;
+}
+
+/* ── split view ── */
+.flux-panes > separator {
+  min-width: 1px;
+  background-color: alpha(@theme_fg_color, 0.08);
+}
+
+/* Only the active pane's current tab carries the accent; the other pane is dimmed. */
+.flux-panes.flux-split .flux-pane:not(.flux-pane-active) tabbar tab:selected {
+  box-shadow: none;
+  color: alpha(@theme_fg_color, 0.75);
+}
+
+.flux-panes.flux-split .flux-pane:not(.flux-pane-active) gridview {
+  opacity: 0.72;
 }

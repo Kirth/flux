@@ -296,7 +296,7 @@ impl FluxApp {
                             }
                         }
 
-                        let stats = want_stats.then_some(scan.stats);
+                        let stats = want_stats.then(|| Box::new(scan.stats));
                         if (previews.is_empty() && stats.is_none()) || stale() {
                             return;
                         }

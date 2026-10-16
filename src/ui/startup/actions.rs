@@ -23,6 +23,13 @@ impl FluxApp {
             s_sidebar.input(AppMsg::ToggleSidebar);
         });
         action_group.add_action(&toggle_sidebar_action);
+
+        let toggle_split_action = gio::SimpleAction::new("toggle-split", None);
+        let s_split = sender.clone();
+        toggle_split_action.connect_activate(move |_, _| {
+            s_split.input(AppMsg::ToggleSplitView);
+        });
+        action_group.add_action(&toggle_split_action);
         action_group
     }
 

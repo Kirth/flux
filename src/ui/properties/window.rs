@@ -13,6 +13,8 @@ use std::process::Command;
 
 pub struct FileProperties {
     sections: FactoryVecDeque<MetadataSection>,
+    /// Index of the "Calculating…" placeholder section for folders.
+    total_placeholder: Option<usize>,
     filename: String,
     app_list: Vec<gio::AppInfo>,
     current_mime: String,
@@ -23,6 +25,8 @@ pub struct FileProperties {
 pub enum PropertiesMsg {
     CopyToClipboard(String),
     AppSelected(u32),
+    /// The background folder walk finished; replaces the "Calculating…" section.
+    FolderTotal(super::sections::SectionData),
 }
 
 #[relm4::component(pub)]
@@ -72,7 +76,7 @@ impl SimpleComponent for FileProperties {
 
     fn init(
         path: Self::Init,
-        _root: Self::Root,
+        root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let filename = path
@@ -82,12 +86,28 @@ impl SimpleComponent for FileProperties {
             .to_string();
         let mime_type = utils::media::get_mime_type(&path);
 
+        let is_dir = path.is_dir();
         let mut file_content = Vec::new();
-        if let Ok(f) = fs::File::open(&path) {
-            let _ = f.take(1024 * 1024).read_to_end(&mut file_content);
+        if !is_dir {
+            if let Ok(f) = fs::File::open(&path) {
+                let _ = f.take(1024 * 1024).read_to_end(&mut file_content);
+            }
         }
 
-        let sections_data = build_sections(&path, &mime_type, &file_content);
+        let mut sections_data = build_sections(&path, &mime_type, &file_content);
+
+        // Folders: the recursive total can take a while, so it's filled in later.
+        let total_placeholder = is_dir.then(|| {
+            let idx = sections_data.len().min(2);
+            sections_data.insert(idx, super::sections::folder_total_placeholder());
+            let walk_path = path.clone();
+            let walk_sender = sender.input_sender().clone();
+            std::thread::spawn(move || {
+                let total = super::sections::folder_total_section(&walk_path);
+                let _ = walk_sender.send(PropertiesMsg::FolderTotal(total));
+            });
+            idx
+        });
 
         let mut sections = FactoryVecDeque::builder()
             .launch(gtk::Box::new(gtk::Orientation::Vertical, 24))
@@ -153,6 +173,7 @@ impl SimpleComponent for FileProperties {
 
         let model = FileProperties {
             sections,
+            total_placeholder,
             filename,
             app_list: all_apps,
             current_mime: mime_type,
@@ -165,11 +186,35 @@ impl SimpleComponent for FileProperties {
 
         let widgets = view_output!();
 
+        // Escape closes the window (it opens as a modal over flux).
+        let keys = gtk::EventControllerKey::new();
+        let window = root.clone();
+        keys.connect_key_pressed(move |_, key, _, _| {
+            if key == adw::gdk::Key::Escape {
+                window.close();
+                return gtk::glib::Propagation::Stop;
+            }
+            gtk::glib::Propagation::Proceed
+        });
+        root.add_controller(keys);
+
         ComponentParts { model, widgets }
     }
 
     fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>) {
         match message {
+            PropertiesMsg::FolderTotal(section) => {
+                let mut guard = self.sections.guard();
+                match self.total_placeholder.take() {
+                    Some(idx) if idx < guard.len() => {
+                        guard.remove(idx);
+                        guard.insert(idx, section);
+                    }
+                    _ => {
+                        guard.push_back(section);
+                    }
+                }
+            }
             PropertiesMsg::CopyToClipboard(text) => {
                 if let Some(display) = adw::gdk::Display::default() {
                     display.clipboard().set_text(&text);

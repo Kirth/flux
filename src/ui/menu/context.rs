@@ -596,6 +596,30 @@ impl FluxApp {
             root_menu.append_item(&item);
         }
 
+        // Properties always closes the menu in its own section: the clicked item,
+        // else the selection, else the folder being shown (empty-space click).
+        let properties_target = path
+            .clone()
+            .or_else(|| self.get_selected_path())
+            .unwrap_or_else(|| self.current_path.clone());
+        let (properties_action, _) = register_path_action(
+            &action_group,
+            "show-properties",
+            sender,
+            properties_target,
+            None,
+            |s, target, _| s.input(AppMsg::OpenFileProperties(target)),
+        );
+        let properties_section = gio::Menu::new();
+        let properties_item = gio::MenuItem::new(
+            Some(&crate::i18n::tr("Properties")),
+            Some(&properties_action),
+        );
+        properties_item.set_attribute_value("accel", Some(&"<Alt>Return".to_variant()));
+        properties_item.set_icon(&gio::ThemedIcon::new("document-properties-symbolic"));
+        properties_section.append_item(&properties_item);
+        root_menu.append_section(None, &properties_section);
+
         self.context_menu_popover.set_menu_model(Some(&root_menu));
         self.context_menu_popover
             .set_pointing_to(Some(&gdk::Rectangle::new(x as i32, y as i32, 1, 1)));

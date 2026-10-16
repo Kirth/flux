@@ -91,6 +91,16 @@ gridview > child:selected,
 .sidebar-row button.sidebar-expander:hover {
   background-color: alpha(@theme_fg_color, 0.1);
 }
+
+tabbar tab button.image-button {
+  background: none;
+  box-shadow: none;
+  border: none;
+}
+
+tabbar tab button.image-button:hover {
+  background-color: alpha(@theme_fg_color, 0.12);
+}
 ";
 
 /// Applies the theme CSS, then the user's style.css on top as overrides.

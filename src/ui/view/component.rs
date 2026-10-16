@@ -75,6 +75,8 @@ impl SimpleAsyncComponent for FluxApp {
 
             #[watch]
             set_decorated: model.config.ui.show_csd,
+            #[watch]
+            set_class_active: ("flux-compact", model.compact),
 
             /// UI LAYOUT
             gtk::Box {
@@ -89,7 +91,7 @@ impl SimpleAsyncComponent for FluxApp {
                     set_width_request: model.config.ui.sidebar_width,
                     add_css_class: constants::SIDEBAR_CSS_CLASS,
                     #[watch]
-                    set_visible: model.sidebar_visible,
+                    set_visible: model.sidebar_visible && !model.sidebar_auto_hidden && !model.compact,
 
                     // Floating margins around the entire sidebar card
                     set_margin_top: 8,
@@ -119,7 +121,7 @@ impl SimpleAsyncComponent for FluxApp {
                     set_orientation: gtk::Orientation::Vertical,
                     add_css_class: "sidebar-resize-handle",
                     #[watch]
-                    set_visible: model.sidebar_visible,
+                    set_visible: model.sidebar_visible && !model.sidebar_auto_hidden && !model.compact,
                 },
 
                 /// Main content container for the header and file browser using AdwToolbarView.
@@ -148,6 +150,7 @@ impl SimpleAsyncComponent for FluxApp {
                             set_icon_name: constants::ICON_FORWARD,
                             connect_clicked => AppMsg::GoForward,
                             #[watch] set_sensitive: !model.forward_stack.is_empty(),
+                            #[watch] set_visible: !model.compact,
                             connect_realize => |w| FluxApp::set_cursor_pointer(w.as_ref(), true),
                         },
 
@@ -159,7 +162,10 @@ impl SimpleAsyncComponent for FluxApp {
                         set_title_widget: header_stack = &gtk::Stack {
                             set_halign: gtk::Align::Center,
                             set_hexpand: false,
-                            set_width_request: constants::LOCATION_ENTRY_WIDTH_REQUEST,
+                            // Size to the visible page (breadcrumbs, search, ...) so the
+                            // header can shrink in narrow windows.
+                            set_hhomogeneous: false,
+                            set_interpolate_size: true,
                             set_transition_type: gtk::StackTransitionType::Crossfade,
                             #[watch]
                             set_visible_child_name: &model.header_view,
@@ -168,8 +174,9 @@ impl SimpleAsyncComponent for FluxApp {
                             #[name = "path_entry"]
                             add_child = &gtk::ScrolledWindow {
                                 add_css_class: "flux-breadcrumb-scroller",
-                                set_propagate_natural_width: false,
-                                set_min_content_width: constants::SCROLLED_WINDOW_MIN_WIDTH,
+                                // Full breadcrumbs when there's room, but the window can
+                                // shrink below their width (they scroll horizontally then).
+                                set_propagate_natural_width: true,
                                 set_hscrollbar_policy: gtk::PolicyType::External,
                                 set_vscrollbar_policy: gtk::PolicyType::Never,
                                 set_halign: gtk::Align::Center,
@@ -254,7 +261,7 @@ impl SimpleAsyncComponent for FluxApp {
                             add_child = &gtk::Entry {
                                 set_hexpand: false,
                                 set_halign: gtk::Align::Center,
-                                set_width_request: constants::LOCATION_ENTRY_WIDTH_REQUEST,
+                                set_width_chars: constants::HEADER_ENTRY_MIN_CHARS,
                                 set_max_width_chars: constants::BREADCRUMB_MAX_WIDTH_CHARS as i32,
 
                                 connect_map => |entry| {
@@ -290,7 +297,8 @@ impl SimpleAsyncComponent for FluxApp {
                                 /// Filtering and search input field.
                                 append = &gtk::SearchEntry {
                                     set_hexpand: false,
-                                    set_width_request: constants::SEARCH_ENTRY_WIDTH_REQUEST,
+                                    set_width_chars: constants::HEADER_ENTRY_MIN_CHARS,
+                                    set_max_width_chars: constants::HEADER_ENTRY_MAX_CHARS,
                                     #[track = "model.search_just_opened"]
                                     set_text: &model.filter,
                                     add_controller = gtk::EventControllerKey {
@@ -370,7 +378,8 @@ impl SimpleAsyncComponent for FluxApp {
                                 append = &gtk::Entry {
                                     set_hexpand: false,
                                     set_halign: gtk::Align::Center,
-                                    set_width_request: constants::SEARCH_ENTRY_WIDTH_REQUEST,
+                                    set_width_chars: constants::HEADER_ENTRY_MIN_CHARS,
+                                    set_max_width_chars: constants::HEADER_ENTRY_MAX_CHARS,
                                     set_placeholder_text: Some(&tr("Patterns: *.py, image/*, audio/*")),
                                     set_secondary_icon_name: Some("edit-clear-symbolic"),
                                     set_secondary_icon_tooltip_text: Some(&tr("Clear filter")),
@@ -468,7 +477,7 @@ impl SimpleAsyncComponent for FluxApp {
                         /// Contextual button to inspect Git status in current repository.
                         pack_end = &gtk::Button {
                             #[watch]
-                            set_visible: model.is_in_git_repo,
+                            set_visible: model.is_in_git_repo && !model.compact,
                             connect_clicked => AppMsg::ShowGitStatusView,
                             set_tooltip_text: Some(&tr("Show Git Changes")),
                             add_css_class: "flat",
@@ -523,10 +532,25 @@ impl SimpleAsyncComponent for FluxApp {
                             }
                         },
 
+                        /// Toggle the commander-style split view (Ctrl+\\).
+                        pack_end = &gtk::ToggleButton {
+                            #[watch]
+                            set_active: model.split_view,
+                            #[watch]
+                            set_visible: !model.compact,
+                            set_icon_name: "view-dual-symbolic",
+                            set_tooltip_text: Some(&tr("Split View")),
+                            add_css_class: "flat",
+                            connect_realize => |w| FluxApp::set_cursor_pointer(w.as_ref(), true),
+                            connect_clicked => AppMsg::ToggleSplitView,
+                        },
+
                         /// Toggle between grid card layout and compact list layout.
                         pack_end = &gtk::ToggleButton {
                             #[watch]
                             set_active: model.is_list_mode,
+                            #[watch]
+                            set_visible: !model.compact,
                             set_icon_name: "view-list-symbolic",
                             set_tooltip_text: Some(&tr("Toggle List Mode")),
                             add_css_class: "flat",
@@ -541,6 +565,8 @@ impl SimpleAsyncComponent for FluxApp {
                             add_css_class: "flat",
                             #[watch]
                             set_active: model.extension_filter.is_some(),
+                            #[watch]
+                            set_visible: !model.compact,
                             connect_realize => |w| FluxApp::set_cursor_pointer(w.as_ref(), true),
 
                             #[wrap(Some)]
@@ -568,6 +594,8 @@ impl SimpleAsyncComponent for FluxApp {
                             set_margin_end: constants::HEADER_MARGIN_END,
                             set_valign: gtk::Align::Center,
                             add_css_class: constants::SORT_CONTAINER_CLASS,
+                            #[watch]
+                            set_visible: !model.compact,
 
                             add_controller = gtk::GestureClick {
                                 set_propagation_phase: gtk::PropagationPhase::Capture,
@@ -904,6 +932,8 @@ impl SimpleAsyncComponent for FluxApp {
                         gtk::Label {
                             #[watch]
                             set_label: &model.sort_status(),
+                            #[watch]
+                            set_visible: !model.compact,
                             add_css_class: "caption",
                             add_css_class: "dim-label",
                             set_halign: gtk::Align::End,
@@ -1002,6 +1032,7 @@ impl SimpleAsyncComponent for FluxApp {
         Self::store_widget_refs(&mut model, &widgets, &sender);
         Self::setup_input_controllers(&model, &widgets, &root, &sender);
         Self::setup_window(&model, &widgets, &root);
+        Self::setup_breakpoints(&mut model, &root, &sender);
         Self::schedule_startup_tasks(&model, &sender, open_archive);
 
         AsyncComponentParts { model, widgets }

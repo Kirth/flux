@@ -29,19 +29,35 @@ pub(super) fn build_sections(
 
     let mut sections_data: Vec<SectionData> = Vec::new();
 
-    sections_data.push((
-        tr("File Identity"),
-        vec![
-            (tr("Filename"), filename),
-            (
-                tr("Extension"),
-                path.extension()
-                    .map(|e| e.to_string_lossy().to_string())
-                    .unwrap_or(tr("None")),
-            ),
-            (tr("MIME Type"), mime_type.to_string()),
-        ],
-    ));
+    if path.is_dir() {
+        sections_data.push((
+            tr("Folder"),
+            vec![
+                (tr("Name"), filename.clone()),
+                (
+                    tr("Location"),
+                    path.parent()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_default(),
+                ),
+            ],
+        ));
+        sections_data.push(folder_contents_section(path));
+    } else {
+        sections_data.push((
+            tr("File Identity"),
+            vec![
+                (tr("Filename"), filename),
+                (
+                    tr("Extension"),
+                    path.extension()
+                        .map(|e| e.to_string_lossy().to_string())
+                        .unwrap_or(tr("None")),
+                ),
+                (tr("MIME Type"), mime_type.to_string()),
+            ],
+        ));
+    }
 
     // ── Symlink ─────────────────────────────────────────────────────────────
     if path.is_symlink() {
@@ -81,16 +97,17 @@ pub(super) fn build_sections(
 
     // ── System & disk, temporal, security ──────────────────────────────────
     if let Ok(meta) = path.metadata() {
-        let mut system_disk = vec![
-            (tr("Full Path"), path.to_string_lossy().to_string()),
-            (
+        let mut system_disk = vec![(tr("Full Path"), path.to_string_lossy().to_string())];
+        // A folder's own size is just its directory entry; its totals are listed above.
+        if !meta.is_dir() {
+            system_disk.push((
                 tr("Size"),
                 format!("{} ({} B)", format_size(meta.len()), meta.len()),
-            ),
-            (tr("Disk Usage"), format_size(meta.blocks() * 512)),
-            (tr("Inode"), meta.ino().to_string()),
-            (tr("Device ID"), meta.dev().to_string()),
-        ];
+            ));
+            system_disk.push((tr("Disk Usage"), format_size(meta.blocks() * 512)));
+        }
+        system_disk.push((tr("Inode"), meta.ino().to_string()));
+        system_disk.push((tr("Device ID"), meta.dev().to_string()));
 
         if let Ok(mounts) = fs::read_to_string("/proc/self/mounts") {
             let mount_info = mounts
@@ -128,8 +145,23 @@ pub(super) fn build_sections(
         ));
 
         let mut security = vec![
-            (tr("Permissions"), format!("{:03o}", meta.mode() & 0o777)),
-            (tr("UID/GID"), format!("{}:{}", meta.uid(), meta.gid())),
+            (
+                tr("Permissions"),
+                format!(
+                    "{}  ({:03o})",
+                    crate::ui::list_columns::format_permissions(meta.mode()).unwrap_or_default(),
+                    meta.mode() & 0o777
+                ),
+            ),
+            (
+                tr("Owner"),
+                format!(
+                    "{} (uid {}, gid {})",
+                    crate::ui::list_columns::owner_name(meta.uid()),
+                    meta.uid(),
+                    meta.gid()
+                ),
+            ),
         ];
         if !file_content.is_empty() {
             security.push((
@@ -140,9 +172,9 @@ pub(super) fn build_sections(
                 .iter()
                 .map(|b| format!("{:02x}", b))
                 .collect::<String>();
-
-            sections_data.push((tr("Security"), vec![(tr("SHA256"), hash_hex)]));
+            security.push((tr("SHA256"), hash_hex));
         }
+        sections_data.push((tr("Security"), security));
     }
 
     // ── ELF analysis ────────────────────────────────────────────────────────
@@ -192,4 +224,100 @@ pub(super) fn build_sections(
     let _ = utils::media::get_mime_type; // keep the `utils` import live for callers
 
     sections_data
+}
+
+/// Rows for a breakdown of bytes per file category, largest first.
+fn category_rows(by_category: &[u64; 7]) -> Vec<(String, String)> {
+    use crate::services::thumbnails::FileCategory;
+    let mut parts: Vec<(FileCategory, u64)> = FileCategory::ALL
+        .iter()
+        .zip(by_category)
+        .map(|(c, b)| (*c, *b))
+        .filter(|(_, b)| *b > 0)
+        .collect();
+    parts.sort_by_key(|p| std::cmp::Reverse(p.1));
+    parts
+        .into_iter()
+        .map(|(c, b)| (format!("  {}", c.title()), format_size(b)))
+        .collect()
+}
+
+/// Direct contents of a folder: entry count, size of the files in it, and by type.
+fn folder_contents_section(path: &Path) -> SectionData {
+    let stats = crate::services::thumbnails::scan_folder(path, true, false).stats;
+    let more = if stats.truncated { "≥" } else { "" };
+    let mut rows = vec![
+        (tr("Items"), format!("{more}{}", stats.items)),
+        (
+            tr("Files size"),
+            format!(
+                "{more}{} ({} B)",
+                format_size(stats.total_bytes),
+                stats.total_bytes
+            ),
+        ),
+    ];
+    rows.extend(category_rows(&stats.by_category));
+    (tr("Contents"), rows)
+}
+
+/// Placeholder shown until [`folder_total_section`] finishes.
+pub(super) fn folder_total_placeholder() -> SectionData {
+    (
+        tr("Total (including subfolders)"),
+        vec![(tr("Size"), tr("Calculating…"))],
+    )
+}
+
+/// Everything below a folder, walked recursively (symlinks not followed). Stops after
+/// a couple of million entries or ~20 s so huge trees still return; then values are
+/// marked with "≥". Runs off the main thread.
+pub(super) fn folder_total_section(path: &Path) -> SectionData {
+    use crate::services::thumbnails::{categorize, FileCategory};
+    const MAX_ENTRIES: u64 = 2_000_000;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+
+    let (mut files, mut dirs, mut bytes, mut disk) = (0u64, 0u64, 0u64, 0u64);
+    let mut by_category = [0u64; 7];
+    let mut truncated = false;
+    let mut stack = vec![path.to_path_buf()];
+    'walk: while let Some(dir) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            if files + dirs >= MAX_ENTRIES || std::time::Instant::now() > deadline {
+                truncated = true;
+                break 'walk;
+            }
+            let Ok(meta) = entry.metadata() else {
+                continue;
+            };
+            if meta.is_dir() {
+                dirs += 1;
+                stack.push(entry.path());
+            } else {
+                files += 1;
+                bytes += meta.len();
+                disk += meta.blocks() * 512;
+                let cat = categorize(&entry.path());
+                if let Some(i) = FileCategory::ALL.iter().position(|c| *c == cat) {
+                    by_category[i] += meta.len();
+                }
+            }
+        }
+    }
+
+    let more = if truncated { "≥" } else { "" };
+    let mut rows = vec![
+        (
+            tr("Size"),
+            format!("{more}{} ({more}{} B)", format_size(bytes), bytes),
+        ),
+        (tr("Disk Usage"), format!("{more}{}", format_size(disk))),
+        (tr("Files"), format!("{more}{files}")),
+        (tr("Folders"), format!("{more}{dirs}")),
+    ];
+    rows.extend(category_rows(&by_category));
+    (tr("Total (including subfolders)"), rows)
 }

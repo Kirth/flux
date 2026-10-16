@@ -43,10 +43,23 @@ pub enum AppMsg {
     CloseTab(Option<usize>),
     /// Switches keyboard focus and display to the tab at the given index.
     SwitchTab(usize),
-    /// The user dragged a tab to a new position. `moved_id` is the stable
-    /// `TabState.id` of the moved tab, `new_position` is its new visual
-    /// position in the `adw::TabView`.
-    TabReordered { moved_id: u64, new_position: usize },
+    /// A tab page was selected (clicked, or selected programmatically) in either pane.
+    ActivateTab(u64),
+    /// A tab page finished closing in its tab view; drop it from the model.
+    CloseTabId(u64),
+    /// A tab was dragged into `pane`'s tab strip from the other pane.
+    TabAttached {
+        id: u64,
+        pane: crate::ui::tabs::Pane,
+    },
+    /// Files dropped onto a tab: move them into that tab's folder.
+    DropOnTab { id: u64, paths: Vec<PathBuf> },
+    /// Ctrl+\: toggle the commander-style split view.
+    ToggleSplitView,
+    /// The user clicked into a pane: make its selected tab active.
+    FocusPane(crate::ui::tabs::Pane),
+    /// Tab key in split view: activate the other pane.
+    SwitchPane,
     /// Cycles to the next tab in sequential order.
     NextTab,
     /// Cycles to the previous tab in reverse sequential order.
@@ -540,6 +553,8 @@ pub enum AppMsg {
     },
     #[allow(dead_code)]
     OpenFileProperties(PathBuf),
+    /// Alt+Enter: properties for the selection, or the current folder if none.
+    ShowProperties,
     /// Update the current path and refresh the file list.
     Navigate(PathBuf),
     /// Finalize a file or directory rename operation.
@@ -593,6 +608,10 @@ pub enum AppMsg {
     /// Escape in the file view: cancels a pending Ctrl+X if there is one, otherwise clears
     /// the filter and returns the header to the path bar.
     Escape,
+    /// Narrow-window breakpoint entered/left: compact header and status bar.
+    SetCompact(bool),
+    /// Window became too narrow (or wide enough again) for the sidebar.
+    SetSidebarAutoHidden(bool),
     /// List-view header click: sort by this field, or flip direction if it is already active.
     SortByColumn(SortBy),
     /// Show or hide a list-view detail column (by `ListColumn::key`).
@@ -667,7 +686,8 @@ pub enum AppMsg {
         grid_idx: u32,
         path: std::path::PathBuf,
         previews: Vec<gdk::Texture>,
-        stats: Option<crate::services::thumbnails::FolderStats>,
+        // Boxed: FolderStats is ~80 bytes and would bloat every AppMsg.
+        stats: Option<Box<crate::services::thumbnails::FolderStats>>,
         load_id: u64,
         tab_index: usize,
     },

@@ -122,8 +122,9 @@ impl FluxApp {
             let tag_title = format!("#{}", tags.join(", "));
             if let Some(tab) = self.tabs.get_mut(self.active_tab_index) {
                 tab.title = tag_title.clone();
-                if (self.active_tab_index as i32) < self.tab_view.n_pages() {
-                    let page = self.tab_view.nth_page(self.active_tab_index as i32);
+                if let Some(page) =
+                    crate::ui::tabs::find_tab_page(&self.tab_view, &self.tab_view_right, tab.id)
+                {
                     page.set_title(&tag_title);
                 }
             }

@@ -73,3 +73,24 @@ fn test_list_columns_config_defaults_and_unknown_keys() {
     assert_eq!(cols, [ListColumn::Owner]);
     assert!(ui.list_column_widths.is_empty());
 }
+
+#[test]
+fn test_fit_columns_drops_from_the_right() {
+    use flux::ui::list_columns::fit_columns;
+
+    let widths = [90, 150, 150, 150, 90, 110];
+    let all = [true; 6];
+    // 160 name + 10 gap; then columns in order until one doesn't fit.
+    assert_eq!(fit_columns(all, widths, i32::MAX), [true; 6]);
+    assert_eq!(
+        fit_columns(all, widths, 170 + 90 + 150),
+        [true, true, false, false, false, false]
+    );
+    assert_eq!(fit_columns(all, widths, 200), [false; 6]);
+    // Hidden columns don't take space; the next visible one can still fit.
+    let some = [true, false, false, true, false, false];
+    assert_eq!(
+        fit_columns(some, widths, 170 + 90 + 150),
+        [true, false, false, true, false, false]
+    );
+}

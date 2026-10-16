@@ -82,6 +82,25 @@ impl FluxApp {
         true
     }
 
+    /// Opens the Properties window for `path` as a modal over the main window.
+    pub fn open_properties_window(&self, path: std::path::PathBuf) {
+        let mut properties = crate::ui::FileProperties::builder().launch(path).detach();
+        // Keep the component alive with its window; dropping the controller would shut
+        // it down and take its factory-built sections with it.
+        properties.detach_runtime();
+        let window = properties.widget();
+        if let Some(parent) = self
+            .header_widget
+            .as_ref()
+            .and_then(|w| w.root())
+            .and_downcast::<gtk::Window>()
+        {
+            window.set_transient_for(Some(&parent));
+            window.set_modal(true);
+        }
+        window.present();
+    }
+
     /// Copies the absolute paths of selected items to the clipboard.
     /// Resolves symlinks to their canonical target path when available.
     pub fn handle_copy_path(&self, sender: &AsyncComponentSender<Self>) {

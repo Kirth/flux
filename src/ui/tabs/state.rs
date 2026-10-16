@@ -31,6 +31,8 @@ pub struct TabState {
     pub pending_thumbnails: HashSet<u32>,
     pub last_thumb_scroll_idx: usize,
     pub thumbs_ready: bool,
+    /// Which split-view pane's tab strip this tab lives in.
+    pub pane: super::panes::Pane,
 }
 
 impl TabState {
@@ -82,6 +84,7 @@ impl TabState {
             pending_thumbnails: HashSet::new(),
             last_thumb_scroll_idx: 0,
             thumbs_ready: false,
+            pane: super::panes::Pane::Left,
         }
     }
 }

@@ -4,28 +4,23 @@ use gtk::prelude::*;
 use relm4::prelude::*;
 
 impl FluxApp {
+    /// Ctrl+Tab: next tab within the active pane's strip (selecting it activates it).
     pub fn handle_next_tab(&mut self) {
-        if self.tabs.len() > 1 {
-            let next = (self.active_tab_index + 1) % self.tabs.len();
-            if (next as i32) < self.tab_view.n_pages() {
-                let page = self.tab_view.nth_page(next as i32);
-                self.tab_view.set_selected_page(&page);
-            }
-        }
+        self.step_tab(1);
     }
 
     pub fn handle_prev_tab(&mut self) {
-        if self.tabs.len() > 1 {
-            let prev = if self.active_tab_index == 0 {
-                self.tabs.len() - 1
-            } else {
-                self.active_tab_index - 1
-            };
-            if (prev as i32) < self.tab_view.n_pages() {
-                let page = self.tab_view.nth_page(prev as i32);
-                self.tab_view.set_selected_page(&page);
-            }
+        self.step_tab(-1);
+    }
+
+    fn step_tab(&self, delta: i32) {
+        let view = self.tab_view_for(self.active_pane());
+        let n = view.n_pages();
+        if n < 2 {
+            return;
         }
+        let pos = view.selected_page().map_or(0, |p| view.page_position(&p));
+        view.set_selected_page(&view.nth_page((pos + delta).rem_euclid(n)));
     }
 
     pub(super) fn wire_tab_signals(&self, tab: &mut TabState, sender: &AsyncComponentSender<Self>) {

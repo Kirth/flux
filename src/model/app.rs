@@ -50,6 +50,15 @@ pub struct FluxApp {
     pub tab_view: adw::TabView,
     /// Header strip displaying open tabs, automatically hidden when only one tab is open.
     pub tab_bar: adw::TabBar,
+    /// Right pane's tab view and strip (split view).
+    pub tab_view_right: adw::TabView,
+    pub tab_bar_right: adw::TabBar,
+    /// Commander-style split view is on.
+    pub split_view: bool,
+    /// Left and right pane containers (tab strip + list header + tab view).
+    pub pane_boxes: Option<[gtk::Box; 2]>,
+    /// Horizontal paned holding both panes.
+    pub panes_paned: Option<gtk::Paned>,
     /// Collection of isolated navigation states for all active tabs.
     pub tabs: Vec<crate::ui::TabState>,
     /// Zero-based index of the currently active tab within `tabs`.
@@ -136,6 +145,14 @@ pub struct FluxApp {
     pub files: TypedGridView<FileItem, gtk::MultiSelection>,
     /// Factory-managed collection of sidebar navigation entries.
     pub sidebar: FactoryVecDeque<SidebarPlace>,
+    /// Narrow-window layout (set by a libadwaita breakpoint): compact header and status bar.
+    pub compact: bool,
+    /// The window is too narrow for the sidebar, so it's hidden without touching
+    /// the user's `sidebar_visible` setting. (Compact mode hides it too: libadwaita
+    /// applies one breakpoint at a time, so this is false while `compact` is set.)
+    pub sidebar_auto_hidden: bool,
+    /// Breakpoint that auto-hides the sidebar; its width follows the sidebar's width.
+    pub sidebar_breakpoint: Option<adw::Breakpoint>,
     /// Sidebar tree nodes the user has expanded during this session.
     pub sidebar_expanded: HashSet<PathBuf>,
     /// Folder the sidebar tree is currently auto-expanding towards.

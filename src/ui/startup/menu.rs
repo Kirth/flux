@@ -54,6 +54,10 @@ impl FluxApp {
         toggle_item.set_attribute_value("accel", Some(&"F8".to_variant()));
         view_section.append_item(&toggle_item);
 
+        let split_item = gtk::gio::MenuItem::new(Some(&tr("Split View")), Some("win.toggle-split"));
+        split_item.set_attribute_value("accel", Some(&"<Primary>backslash".to_variant()));
+        view_section.append_item(&split_item);
+
         menu.append_section(None, &view_section);
 
         // ── Tools ────────────────────────────────────────────────────────────

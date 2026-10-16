@@ -8,6 +8,12 @@ use gtk::glib::{self};
 use relm4::prelude::*;
 use std::path::PathBuf;
 
+/// Smallest window width flux allows.
+const MIN_WINDOW_WIDTH: i32 = 200;
+/// Below this content width the header and status bar switch to compact mode
+/// (the full header needs ~530px).
+const COMPACT_BREAKPOINT_PX: i32 = 560;
+
 impl FluxApp {
     /// Attaches the tab bar, header widget, main menu and sidebar wrapper.
     pub(super) fn attach_tabs_and_header(
@@ -15,14 +21,56 @@ impl FluxApp {
         widgets: &FluxAppWidgets,
         sender: &AsyncComponentSender<Self>,
     ) {
-        widgets.toolbar_view.add_top_bar(&model.tab_bar);
         crate::ui::list_columns::init_from_config(&model.config.ui);
-        widgets
-            .tab_view_container
-            .append(&crate::ui::list_columns::build_header(
+
+        // Two panes (split view), each: tab strip, list-view header, tab view. The right
+        // one is hidden until split view is turned on.
+        let build_pane = |bar: &adw::TabBar, view: &adw::TabView, pane| {
+            let pane_box = gtk::Box::builder()
+                .orientation(gtk::Orientation::Vertical)
+                .hexpand(true)
+                .vexpand(true)
+                .css_classes(["flux-pane"])
+                .build();
+            pane_box.append(bar);
+            pane_box.append(&crate::ui::list_columns::build_header(
                 sender.input_sender().clone(),
             ));
-        widgets.tab_view_container.append(&model.tab_view);
+            pane_box.append(view);
+            // Clicking anywhere in a pane makes it the active one (capture phase, so
+            // the click still reaches the grid/header underneath).
+            let click = gtk::GestureClick::builder()
+                .button(0)
+                .propagation_phase(gtk::PropagationPhase::Capture)
+                .build();
+            let s = sender.clone();
+            click.connect_pressed(move |_, _, _, _| s.input(AppMsg::FocusPane(pane)));
+            pane_box.add_controller(click);
+            pane_box
+        };
+        use crate::ui::tabs::Pane;
+        let left = build_pane(&model.tab_bar, &model.tab_view, Pane::Left);
+        let right = build_pane(&model.tab_bar_right, &model.tab_view_right, Pane::Right);
+        right.set_visible(false);
+
+        let panes = gtk::Paned::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .start_child(&left)
+            .end_child(&right)
+            .resize_start_child(true)
+            .resize_end_child(true)
+            // Shrinkable, so each pane's width is its real share of the window even when
+            // its content asks for more (list columns adapt to that width).
+            .shrink_start_child(true)
+            .shrink_end_child(true)
+            .wide_handle(true)
+            .vexpand(true)
+            .css_classes(["flux-panes"])
+            .build();
+        widgets.tab_view_container.append(&panes);
+        model.pane_boxes = Some([left, right]);
+        model.panes_paned = Some(panes);
+        model.update_panes();
         if let Some(first_tab) = model.tabs.first() {
             Self::connect_tab_scroller(&first_tab.scroller, sender);
         }
@@ -32,6 +80,18 @@ impl FluxApp {
         let main_menu = Self::build_main_menu();
         widgets.main_menu_popover.set_menu_model(Some(&main_menu));
         model.header_path_entry = widgets.header_path_entry.downgrade();
+
+        // When the breadcrumbs don't fit (narrow window), keep the current folder (the
+        // last crumb) in view instead of the first.
+        // Applied on idle: the viewport re-clamps the value while it is reallocating.
+        widgets.path_entry.hadjustment().connect_changed(|adj| {
+            let adj = adj.downgrade();
+            glib::idle_add_local_once(move || {
+                if let Some(adj) = adj.upgrade() {
+                    adj.set_value((adj.upper() - adj.page_size()).max(adj.lower()));
+                }
+            });
+        });
 
         let sidebar_wrapper = gtk::Box::new(gtk::Orientation::Vertical, 0);
         if model.sidebar.widget().parent().is_none() {
@@ -322,6 +382,51 @@ impl FluxApp {
         });
 
         widgets.sidebar_container.add_controller(new_section_rc);
+    }
+
+    /// Window width beyond which the sidebar fits next to the full-width content.
+    pub(crate) fn sidebar_breakpoint_width(sidebar_width: i32) -> f64 {
+        // Sidebar + its margins and resize handle + what the full header needs.
+        (sidebar_width.clamp(160, 500) + 20 + COMPACT_BREAKPOINT_PX) as f64
+    }
+
+    /// Narrow-window behaviour via libadwaita breakpoints: the sidebar auto-hides when
+    /// it no longer fits, and below [`COMPACT_BREAKPOINT_PX`] the header and status
+    /// bar go compact. With breakpoints, AdwWindow's minimum width is just its
+    /// `width_request`, so the window can shrink to [`MIN_WINDOW_WIDTH`].
+    pub(super) fn setup_breakpoints(
+        model: &mut FluxApp,
+        root: &adw::Window,
+        sender: &AsyncComponentSender<Self>,
+    ) {
+        root.set_width_request(MIN_WINDOW_WIDTH);
+
+        let max_width = |px: f64| {
+            adw::BreakpointCondition::new_length(
+                adw::BreakpointConditionLengthType::MaxWidth,
+                px,
+                adw::LengthUnit::Px,
+            )
+        };
+
+        let sidebar_bp = adw::Breakpoint::new(max_width(Self::sidebar_breakpoint_width(
+            model.config.ui.sidebar_width,
+        )));
+        {
+            let (on, off) = (sender.clone(), sender.clone());
+            sidebar_bp.connect_apply(move |_| on.input(AppMsg::SetSidebarAutoHidden(true)));
+            sidebar_bp.connect_unapply(move |_| off.input(AppMsg::SetSidebarAutoHidden(false)));
+        }
+        root.add_breakpoint(sidebar_bp.clone());
+        model.sidebar_breakpoint = Some(sidebar_bp);
+
+        let compact_bp = adw::Breakpoint::new(max_width(COMPACT_BREAKPOINT_PX as f64));
+        {
+            let (on, off) = (sender.clone(), sender.clone());
+            compact_bp.connect_apply(move |_| on.input(AppMsg::SetCompact(true)));
+            compact_bp.connect_unapply(move |_| off.input(AppMsg::SetCompact(false)));
+        }
+        root.add_breakpoint(compact_bp);
     }
 
     /// Stores widget handles on the model and tracks the terminal pane height.

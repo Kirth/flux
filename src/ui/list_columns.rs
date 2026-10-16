@@ -104,15 +104,18 @@ struct Header {
     name_label: gtk::Label,
     cells: Vec<gtk::Widget>,
     labels: Vec<gtk::Label>,
+    /// Last applied (visible, sort, ascending), to skip redundant updates.
+    synced: Option<(bool, SortBy, bool)>,
+    /// Width this header's pane gives the columns; `i32::MAX` until laid out.
+    available: i32,
 }
 
 struct State {
     visible: [bool; 6],
     widths: [i32; 6],
     rows: Vec<glib::WeakRef<gtk::Box>>,
-    header: Option<Header>,
-    /// Last applied (visible, sort, ascending), to skip redundant header updates.
-    synced: Option<(bool, SortBy, bool)>,
+    /// One header per split-view pane, in pane order (left, right).
+    headers: Vec<Header>,
 }
 
 impl Default for State {
@@ -127,8 +130,7 @@ impl Default for State {
             visible,
             widths: ListColumn::ALL.map(ListColumn::default_width),
             rows: Vec::new(),
-            header: None,
-            synced: None,
+            headers: Vec::new(),
         }
     }
 }
@@ -184,6 +186,43 @@ pub fn register_row(cells: &gtk::Box) {
     STATE.with(|s| s.borrow_mut().rows.push(cells.downgrade()));
 }
 
+/// Space kept for the icon and name before any detail column is shown.
+const NAME_MIN_WIDTH: i32 = 160;
+
+/// Which of the `visible` columns fit in a row `available` px wide, keeping
+/// [`NAME_MIN_WIDTH`] for the name. Columns are dropped from the right, so a narrow
+/// window still shows Size/Modified rather than an arbitrary subset.
+pub fn fit_columns(visible: [bool; 6], widths: [i32; 6], available: i32) -> [bool; 6] {
+    let mut fitted = [false; 6];
+    let mut used = NAME_MIN_WIDTH + LIST_CELL_SPACING;
+    for i in 0..6 {
+        if !visible[i] {
+            continue;
+        }
+        if used + widths[i] > available {
+            break;
+        }
+        used += widths[i];
+        fitted[i] = true;
+    }
+    fitted
+}
+
+impl State {
+    /// Columns that fit: rows aren't tied to a pane, so they fit the narrowest
+    /// visible pane's header.
+    fn shown(&self) -> [bool; 6] {
+        let available = self
+            .headers
+            .iter()
+            .filter(|h| h.root.is_visible())
+            .map(|h| h.available)
+            .min()
+            .unwrap_or(i32::MAX);
+        fit_columns(self.visible, self.widths, available)
+    }
+}
+
 fn apply_layout(cells: &[gtk::Widget], visible: &[bool; 6], widths: &[i32; 6]) {
     for (i, cell) in cells.iter().enumerate().take(6) {
         cell.set_visible(visible[i]);
@@ -207,7 +246,7 @@ fn children(container: &gtk::Box) -> Vec<gtk::Widget> {
 pub fn apply_to_row(cells: &gtk::Box) {
     STATE.with(|s| {
         let s = s.borrow();
-        apply_layout(&children(cells), &s.visible, &s.widths);
+        apply_layout(&children(cells), &s.shown(), &s.widths);
     });
 }
 
@@ -215,7 +254,7 @@ pub fn apply_to_row(cells: &gtk::Box) {
 pub fn apply_all() {
     STATE.with(|s| {
         let mut s = s.borrow_mut();
-        let (visible, widths) = (s.visible, s.widths);
+        let (visible, widths) = (s.shown(), s.widths);
         s.rows.retain(|weak| match weak.upgrade() {
             Some(cells) => {
                 apply_layout(&children(&cells), &visible, &widths);
@@ -223,23 +262,25 @@ pub fn apply_all() {
             }
             None => false,
         });
-        if let Some(header) = &s.header {
+        for header in &s.headers {
             apply_layout(&header.cells, &visible, &widths);
         }
     });
 }
 
-/// Shows/hides the header and updates its sort arrow. Cheap when nothing changed.
-pub fn sync_header(visible: bool, sort_by: SortBy, ascending: bool) {
-    STATE.with(|s| {
+/// Shows/hides pane `index`'s header and updates its sort arrow. Cheap when nothing
+/// changed.
+pub fn sync_header(index: usize, visible: bool, sort_by: SortBy, ascending: bool) {
+    let visibility_changed = STATE.with(|s| {
         let mut s = s.borrow_mut();
-        if s.synced == Some((visible, sort_by, ascending)) {
-            return;
-        }
-        s.synced = Some((visible, sort_by, ascending));
-        let Some(header) = &s.header else {
-            return;
+        let Some(header) = s.headers.get_mut(index) else {
+            return false;
         };
+        if header.synced == Some((visible, sort_by, ascending)) {
+            return false;
+        }
+        let was_visible = header.synced.is_some_and(|(v, _, _)| v);
+        header.synced = Some((visible, sort_by, ascending));
         header.root.set_visible(visible);
         let arrow = if ascending { " ↑" } else { " ↓" };
         let title = |t: String, active: bool| if active { format!("{t}{arrow}") } else { t };
@@ -249,10 +290,15 @@ pub fn sync_header(visible: bool, sort_by: SortBy, ascending: bool) {
         for (col, label) in ListColumn::ALL.iter().zip(&header.labels) {
             label.set_label(&title(col.title(), col.sort_by() == Some(sort_by)));
         }
+        was_visible != visible
     });
+    // Which headers are visible decides how many columns fit.
+    if visibility_changed {
+        apply_all();
+    }
 }
 
-/// Builds the column header; there is one per window, above the tab view.
+/// Builds a column header; there is one per split-view pane, above its tab view.
 pub fn build_header(sender: Sender<AppMsg>) -> gtk::Box {
     let root = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
@@ -347,15 +393,49 @@ pub fn build_header(sender: Sender<AppMsg>) -> gtk::Box {
     }
     root.add_controller(right_click);
 
+    // Track the room the header really has so columns that no longer fit are hidden.
+    // Measured from the window, not the header's own width: when the columns don't
+    // fit, GTK still allocates the header its (too wide) minimum and clips it.
+    let index = STATE.with(|s| s.borrow().headers.len());
+    root.add_tick_callback(move |w, _| {
+        // Measured from the pane (which may be narrower than its content), not the
+        // header's own width: when the columns don't fit, GTK still allocates the
+        // header its (too wide) minimum and clips it. Its margin is the same on
+        // both sides.
+        let Some(parent) = w.parent() else {
+            return glib::ControlFlow::Continue;
+        };
+        let margin = w
+            .compute_point(&parent, &gtk::graphene::Point::new(0.0, 0.0))
+            .map_or(0.0, |p| p.x());
+        let width = parent.width() - 2 * margin as i32;
+        if width > 0 && w.is_mapped() {
+            let changed = STATE.with(|s| {
+                let mut s = s.borrow_mut();
+                let Some(header) = s.headers.get_mut(index) else {
+                    return false;
+                };
+                let changed = header.available != width;
+                header.available = width;
+                changed
+            });
+            if changed {
+                apply_all();
+            }
+        }
+        glib::ControlFlow::Continue
+    });
+
     STATE.with(|s| {
         let mut s = s.borrow_mut();
-        s.header = Some(Header {
+        s.headers.push(Header {
             root: root.clone(),
             name_label,
             cells,
             labels,
+            synced: None,
+            available: i32::MAX,
         });
-        s.synced = None;
     });
     apply_all();
     root

@@ -9,6 +9,13 @@ impl FluxApp {
         let clamped = val.clamp(160, 500);
         self.config.ui.sidebar_width = clamped;
         utils::save_config(&self.config);
+        if let Some(ref bp) = self.sidebar_breakpoint {
+            bp.set_condition(Some(&adw::BreakpointCondition::new_length(
+                adw::BreakpointConditionLengthType::MaxWidth,
+                Self::sidebar_breakpoint_width(clamped),
+                adw::LengthUnit::Px,
+            )));
+        }
         if let Some(ref widget) = self.sidebar_widget {
             if let Some(box_container) = widget.downcast_ref::<gtk::Box>() {
                 if let Some(first_child) = box_container.first_child() {

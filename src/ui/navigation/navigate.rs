@@ -97,8 +97,9 @@ impl FluxApp {
                 if let Some(tab) = self.tabs.get_mut(self.active_tab_index) {
                     let title = format!("#{}", clean_tag);
                     tab.title = title.clone();
-                    if (self.active_tab_index as i32) < self.tab_view.n_pages() {
-                        let page = self.tab_view.nth_page(self.active_tab_index as i32);
+                    if let Some(page) =
+                        crate::ui::tabs::find_tab_page(&self.tab_view, &self.tab_view_right, tab.id)
+                    {
                         page.set_title(&title);
                     }
                 }
@@ -150,8 +151,9 @@ impl FluxApp {
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_else(|| self.current_path.to_string_lossy().to_string());
                 tab.title = title.clone();
-                if (self.active_tab_index as i32) < self.tab_view.n_pages() {
-                    let page = self.tab_view.nth_page(self.active_tab_index as i32);
+                if let Some(page) =
+                    crate::ui::tabs::find_tab_page(&self.tab_view, &self.tab_view_right, tab.id)
+                {
                     page.set_title(&title);
                 }
             }
@@ -203,8 +205,9 @@ impl FluxApp {
                         .map(|n| n.to_string_lossy().to_string())
                         .unwrap_or_else(|| self.current_path.to_string_lossy().to_string());
                     tab.title = title.clone();
-                    if (self.active_tab_index as i32) < self.tab_view.n_pages() {
-                        let page = self.tab_view.nth_page(self.active_tab_index as i32);
+                    if let Some(page) =
+                        crate::ui::tabs::find_tab_page(&self.tab_view, &self.tab_view_right, tab.id)
+                    {
                         page.set_title(&title);
                     }
                 }
@@ -287,8 +290,9 @@ impl FluxApp {
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_else(|| self.current_path.to_string_lossy().to_string());
                 tab.title = title.clone();
-                if (self.active_tab_index as i32) < self.tab_view.n_pages() {
-                    let page = self.tab_view.nth_page(self.active_tab_index as i32);
+                if let Some(page) =
+                    crate::ui::tabs::find_tab_page(&self.tab_view, &self.tab_view_right, tab.id)
+                {
                     page.set_title(&title);
                 }
             }
@@ -350,8 +354,9 @@ impl FluxApp {
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| self.current_path.to_string_lossy().to_string());
             tab.title = title.clone();
-            if (self.active_tab_index as i32) < self.tab_view.n_pages() {
-                let page = self.tab_view.nth_page(self.active_tab_index as i32);
+            if let Some(page) =
+                crate::ui::tabs::find_tab_page(&self.tab_view, &self.tab_view_right, tab.id)
+            {
                 page.set_title(&title);
             }
         }
