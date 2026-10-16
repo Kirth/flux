@@ -30,8 +30,8 @@ pub(super) fn setup_shortcuts(app: &adw::Application) {
 
     let action_new_window = gio::SimpleAction::new("new-window", None);
     action_new_window.connect_activate(|_, _| {
-        if let Ok(exe) = std::env::current_exe() {
-            let _ = std::process::Command::new(exe).spawn();
+        if let Some(s) = crate::model::SENDER.get() {
+            let _ = s.send(crate::model::AppMsg::OpenNewWindow);
         }
     });
     app.add_action(&action_new_window);

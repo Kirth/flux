@@ -27,6 +27,8 @@ pub(super) fn handle(
         AppMsg::RemoveSidebarSection(name) => app.handle_remove_sidebar_section(name),
         AppMsg::PromptNewSidebarSection => app.show_prompt_new_sidebar_section(sender),
         AppMsg::AddSidebarSection(title) => app.handle_add_sidebar_section(title),
+        AppMsg::AddQuickLink(path) => app.handle_add_quick_link(path),
+        AppMsg::RemoveQuickLink(path) => app.handle_remove_quick_link(path),
         AppMsg::SidebarToggleExpand(index) => app.handle_sidebar_toggle_expand(index),
         AppMsg::SidebarExpand(index) => app.handle_sidebar_expand(index),
         AppMsg::SidebarChildrenLoaded {
@@ -46,6 +48,7 @@ pub(super) fn handle(
         } => app.handle_pin_folder_at(path, before, label_name),
         AppMsg::ShowSidebarPinZone(_) => {}
         AppMsg::ToggleSidebar => app.handle_toggle_sidebar(),
+        AppMsg::CloseSidebarOverlay => app.close_sidebar_overlay(),
         AppMsg::SetSidebarWidth(val) => app.handle_set_sidebar_width(val),
         AppMsg::ShowSidebarIconPicker(path) => app.show_sidebar_icon_picker(path, sender),
 

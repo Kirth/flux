@@ -70,6 +70,7 @@ mimalloc = "0.1.52"
 regex = "1.13.1"
 nucleo = "0.5.0"
 sysinfo = "0.39.6"
+gstreamer = { version = "0.25", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"

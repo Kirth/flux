@@ -10,7 +10,7 @@ impl FluxApp {
         target_dir: PathBuf,
         sender: &AsyncComponentSender<Self>,
     ) {
-        let window = gtk::Application::default().active_window();
+        let window = relm4::main_application().active_window();
         let s = sender.clone();
 
         let dir_name = target_dir

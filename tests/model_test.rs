@@ -284,3 +284,22 @@ fn test_list_icon_size_default() {
     let config: Config = toml::from_str("").expect("Failed to parse empty config");
     assert_eq!(config.ui.list_icon_size, 24);
 }
+
+#[test]
+fn test_quick_links_parse_and_default_empty() {
+    let parsed: Config = toml::from_str(
+        r#"
+[[quick_links]]
+name = "completed"
+icon = "folder-download-symbolic"
+path = "/nzb/completed"
+"#,
+    )
+    .unwrap();
+    assert_eq!(parsed.quick_links.len(), 1);
+    assert_eq!(parsed.quick_links[0].path, "/nzb/completed");
+    assert!(parsed.sidebar.is_empty());
+
+    let empty: Config = toml::from_str("").unwrap();
+    assert!(empty.quick_links.is_empty());
+}

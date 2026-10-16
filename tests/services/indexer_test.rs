@@ -394,3 +394,27 @@ fn worker_applies_events_and_periodic_delta() {
     assert!(wait_for("external", true), "delta scan");
     ENABLED.store(false, Ordering::Relaxed);
 }
+
+#[test]
+fn old_schema_index_is_discarded() {
+    let tmp = tempfile::tempdir().unwrap();
+    let db = tmp.path().join("index.db");
+    {
+        let c = Connection::open(&db).unwrap();
+        c.execute_batch(
+            "CREATE TABLE junk (x); INSERT INTO junk VALUES (1); PRAGMA user_version = 2;",
+        )
+        .unwrap();
+    }
+    let idx = SearchIndex::open_at(&db).unwrap();
+    assert!(!idx.is_ready());
+    let has_junk: i64 = idx
+        .conn()
+        .query_row(
+            "SELECT count(*) FROM sqlite_master WHERE name = 'junk'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(has_junk, 0);
+}

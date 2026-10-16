@@ -23,7 +23,7 @@ pub fn show_conflict_dialog(
     tx: oneshot::Sender<(ConflictChoice, bool)>,
     sender: AsyncComponentSender<crate::model::FluxApp>,
 ) {
-    let window = gtk::Application::default().active_window();
+    let window = relm4::main_application().active_window();
 
     let file_name = ctx
         .dest

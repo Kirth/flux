@@ -151,6 +151,13 @@ pub struct FluxApp {
     /// the user's `sidebar_visible` setting. (Compact mode hides it too: libadwaita
     /// applies one breakpoint at a time, so this is false while `compact` is set.)
     pub sidebar_auto_hidden: bool,
+    /// The sidebar is shown floating over the files (narrow windows only).
+    pub sidebar_overlay_open: bool,
+    /// Overlay around the main layout, the box the sidebar normally sits in, and the
+    /// scrim behind the floating sidebar.
+    pub main_overlay: Option<gtk::Overlay>,
+    pub main_box: Option<gtk::Box>,
+    pub sidebar_scrim: Option<gtk::Widget>,
     /// Breakpoint that auto-hides the sidebar; its width follows the sidebar's width.
     pub sidebar_breakpoint: Option<adw::Breakpoint>,
     /// Sidebar tree nodes the user has expanded during this session.

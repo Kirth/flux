@@ -52,6 +52,10 @@ pub enum SidebarMsg {
     Expand(DynamicIndex),
     /// Pin a tree-child folder to the end of the configured sidebar entries.
     Pin(PathBuf),
+    /// Add a folder to the plain shortcut links at the top of the sidebar.
+    AddLink(PathBuf),
+    /// Remove a shortcut link.
+    RemoveLink(PathBuf),
 }
 
 /// A subfolder discovered while expanding a sidebar tree row.
@@ -130,6 +134,8 @@ pub struct SidebarPlaceInit {
     pub is_tree_child: bool,
     /// Known child state; `None` means not yet enumerated.
     pub has_children: Option<bool>,
+    /// A plain shortcut link (`[[quick_links]]`): navigates, never expands.
+    pub is_link: bool,
 }
 
 /// Simple model for a pinned sidebar location or one of its expanded subfolders.
@@ -145,6 +151,7 @@ pub struct SidebarPlace {
     pub is_tree_child: bool,
     pub expanded: bool,
     pub has_children: Option<bool>,
+    pub is_link: bool,
     pub index: DynamicIndex,
 }
 
@@ -152,6 +159,7 @@ impl SidebarPlace {
     /// Whether this row shows a chevron and can be expanded into subfolders.
     pub fn is_expandable(&self) -> bool {
         !self.is_section_label
+            && !self.is_link
             && !is_virtual_sidebar_path(&self.path)
             && self.has_children != Some(false)
     }
@@ -211,8 +219,13 @@ impl FactoryComponent for SidebarPlace {
 
             add_controller = gtk::GestureClick {
                 set_button: MOUSE_RIGHT_CLICK,
-                connect_pressed[sender, path = self.path.clone(), name = self.name.clone(), is_label = self.is_section_label, is_child = self.is_tree_child] => move |gesture, _, x, y| {
+                connect_pressed[sender, path = self.path.clone(), name = self.name.clone(), is_label = self.is_section_label, is_child = self.is_tree_child, is_link = self.is_link] => move |gesture, _, x, y| {
                     gesture.set_state(gtk::EventSequenceState::Claimed);
+                    // The shortcut links' own header isn't a `[[sidebar]]` label: no
+                    // rename/remove-section actions for it.
+                    if is_label && is_link {
+                        return;
+                    }
 
                     let menu = gtk::PopoverMenu::builder()
                         .has_arrow(false)
@@ -263,7 +276,10 @@ impl FactoryComponent for SidebarPlace {
                         menu_model.append(Some(&tr("Open in New Tab")), Some("sidebar.open_new_tab"));
                         menu_model.append(Some(&tr("Rename")), Some("sidebar.rename"));
                         menu_model.append(Some(&tr("Change icon")), Some("sidebar.change_icon"));
-                        menu_model.append(Some(&tr("Remove from sidebar")), Some("sidebar.remove"));
+                        menu_model.append(
+                            Some(&if is_link { tr("Remove from Shortcuts") } else { tr("Remove from sidebar") }),
+                            Some("sidebar.remove"),
+                        );
 
                         let open_tab_action = gio::SimpleAction::new("open_new_tab", None);
                         let sender_ot = sender.clone();
@@ -297,9 +313,28 @@ impl FactoryComponent for SidebarPlace {
                         let sender_c = sender.clone();
                         let path_c = path.clone();
                         remove_action.connect_activate(move |_, _| {
-                            let _ = sender_c.output(SidebarMsg::Remove(path_c.clone()));
+                            let msg = if is_link {
+                                SidebarMsg::RemoveLink(path_c.clone())
+                            } else {
+                                SidebarMsg::Remove(path_c.clone())
+                            };
+                            let _ = sender_c.output(msg);
                         });
                         action_group.add_action(&remove_action);
+                    }
+
+                    // Any real folder row can become a plain shortcut link.
+                    if !is_label && !is_link && path.is_dir() {
+                        let links = gio::Menu::new();
+                        links.append(Some(&tr("Add to Shortcuts")), Some("sidebar.add_link"));
+                        menu_model.append_section(None, &links);
+                        let add_link_action = gio::SimpleAction::new("add_link", None);
+                        let sender_al = sender.clone();
+                        let path_al = path.clone();
+                        add_link_action.connect_activate(move |_, _| {
+                            let _ = sender_al.output(SidebarMsg::AddLink(path_al.clone()));
+                        });
+                        action_group.add_action(&add_link_action);
                     }
 
                     menu.set_menu_model(Some(&menu_model));
@@ -319,7 +354,7 @@ impl FactoryComponent for SidebarPlace {
             // Drag source: carry this row's path or label identifier as a plain string
             add_controller = gtk::DragSource {
                 set_actions: if utils::load_config().ui.disable_drag_and_drop { gdk::DragAction::empty() } else { gdk::DragAction::MOVE },
-                connect_prepare[path = self.path.clone(), name = self.name.clone(), is_label = self.is_section_label, is_child = self.is_tree_child] => move |src, _, _| {
+                connect_prepare[path = self.path.clone(), name = self.name.clone(), is_label = self.is_section_label, is_child = self.is_tree_child || self.is_link] => move |src, _, _| {
                     // Generated subfolder rows are not config entries, so they cannot be reordered.
                     if is_child || utils::load_config().ui.disable_drag_and_drop {
                         return None;
@@ -345,7 +380,7 @@ impl FactoryComponent for SidebarPlace {
             add_controller = gtk::DropTarget {
                 set_actions: if utils::load_config().ui.disable_drag_and_drop { gdk::DragAction::empty() } else { gdk::DragAction::MOVE },
                 set_types: &[glib::types::Type::STRING],
-                connect_drop[sender, path = self.path.clone(), name = self.name.clone(), is_label = self.is_section_label, is_child = self.is_tree_child] => move |_, value, _, _| {
+                connect_drop[sender, path = self.path.clone(), name = self.name.clone(), is_label = self.is_section_label, is_child = self.is_tree_child || self.is_link] => move |_, value, _, _| {
                     if is_child || utils::load_config().ui.disable_drag_and_drop {
                         return false;
                     }
@@ -410,7 +445,7 @@ impl FactoryComponent for SidebarPlace {
                     }
                 },
 
-                connect_drop[sender, path = self.path.clone(), name = self.name.clone(), is_label = self.is_section_label, is_child = self.is_tree_child, hover_timer = std::rc::Rc::<std::cell::Cell::<Option<glib::SourceId>>>::default()] => move |target, value, _, _| {
+                connect_drop[sender, path = self.path.clone(), name = self.name.clone(), is_label = self.is_section_label, is_child = self.is_tree_child || self.is_link, hover_timer = std::rc::Rc::<std::cell::Cell::<Option<glib::SourceId>>>::default()] => move |target, value, _, _| {
                     if utils::load_config().ui.disable_drag_and_drop {
                         return false;
                     }
@@ -539,6 +574,7 @@ impl FactoryComponent for SidebarPlace {
             is_tree_child: init.is_tree_child,
             expanded: false,
             has_children: init.has_children,
+            is_link: init.is_link,
             index: index.clone(),
         }
     }

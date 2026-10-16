@@ -63,6 +63,9 @@ pub fn run() {
         StartupAction::FileProperties(path) => {
             let app = RelmApp::new("flux.PropertiesViewer");
             app.allow_multiple_instances(true);
+            // Same look as inside flux: base stylesheet, then the theme and user overrides.
+            relm4::set_global_css(include_str!("../ui/style.css"));
+            crate::utils::helpers::load_custom_css();
             app.with_args(vec![]).run::<FileProperties>(path);
         }
 

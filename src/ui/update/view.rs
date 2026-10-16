@@ -9,8 +9,14 @@ pub(super) fn handle(
     match msg {
         AppMsg::SelectionChanged { tab_id } => app.handle_selection_changed(tab_id, sender),
         AppMsg::ToggleListMode => app.handle_toggle_list_mode(),
-        AppMsg::SetCompact(on) => app.compact = on,
-        AppMsg::SetSidebarAutoHidden(on) => app.sidebar_auto_hidden = on,
+        AppMsg::SetCompact(on) => {
+            app.close_sidebar_overlay();
+            app.compact = on;
+        }
+        AppMsg::SetSidebarAutoHidden(on) => {
+            app.close_sidebar_overlay();
+            app.sidebar_auto_hidden = on;
+        }
         AppMsg::SortByColumn(sort) => app.handle_sort_by_column(sort, sender),
         AppMsg::ToggleListColumn(key) => app.handle_toggle_list_column(&key),
         AppMsg::SetListColumnWidth(key, px) => app.handle_set_list_column_width(key, px),

@@ -27,6 +27,31 @@ impl FluxApp {
                 .unwrap_or_else(|| p.to_string_lossy().to_string())
         };
 
+        // Plain shortcut links come first, above the tree of places.
+        if !self.config.quick_links.is_empty() {
+            guard.push_back(SidebarPlaceInit {
+                name: crate::i18n::tr("Shortcuts"),
+                is_section_label: true,
+                is_link: true,
+                ..Default::default()
+            });
+            for link in &self.config.quick_links {
+                let icon = if link.icon.is_empty() {
+                    "folder-symbolic".to_string()
+                } else {
+                    link.icon.clone()
+                };
+                guard.push_back(SidebarPlaceInit {
+                    name: link.name.clone(),
+                    icon,
+                    path: Self::expand_path(&link.path),
+                    is_link: true,
+                    has_children: Some(false),
+                    ..Default::default()
+                });
+            }
+        }
+
         //Core XDG Directories - Conditioned on show_xdg_dirs config
         if self.config.ui.show_xdg_dirs {
             if let Some(p) = dirs::home_dir() {

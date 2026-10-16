@@ -50,6 +50,20 @@ pub(super) fn launch_main_app(
 
     setup_shortcuts(&base_app);
 
+    // relm4 adds and shows the main window before the async init has built (and
+    // sized) its content. Size it here, before it's mapped:
+    // - its minimum, else it maps with libadwaita's default 360×200 and a tiling
+    //   compositor's narrower tile gets a too-wide first frame;
+    // - its default size, else setting it later (on a mapped window) acts as a resize
+    //   request that overrides the compositor's tile size until its next configure.
+    base_app.connect_window_added(|_, window| {
+        if window.is::<adw::Window>() && !window.is_mapped() && window.transient_for().is_none() {
+            window.set_size_request(200, 200);
+            let ui = crate::utils::load_config().ui;
+            window.set_default_size(ui.startup_window_width, ui.startup_window_height);
+        }
+    });
+
     let app: RelmApp<AppMsg> = RelmApp::from_app(base_app);
     app.allow_multiple_instances(true);
     app.with_args(vec![]).run_async::<FluxApp>(AppInit {

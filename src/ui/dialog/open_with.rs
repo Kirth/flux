@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 impl FluxApp {
     pub fn show_open_with_dialog(&self, target_file: PathBuf, sender: &AsyncComponentSender<Self>) {
-        let window = gtk::Application::default().active_window();
+        let window = relm4::main_application().active_window();
         let s = sender.clone();
 
         let dialog = adw::Window::builder()

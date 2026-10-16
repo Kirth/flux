@@ -7,7 +7,7 @@ impl FluxApp {
         self.config.ui.start_maximized = max;
         utils::save_config(&self.config);
 
-        let app = gtk::Application::default();
+        let app = relm4::main_application();
         if let Some(window) = app.active_window() {
             if max {
                 window.maximize();

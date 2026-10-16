@@ -87,7 +87,7 @@ pub(crate) fn wire_tab_view(
         view.connect_close_page(move |tv, page| {
             let total = tv.n_pages() + other.upgrade().map_or(0, |o| o.n_pages());
             if total <= 1 {
-                if let Some(win) = gtk::Application::default().active_window() {
+                if let Some(win) = relm4::main_application().active_window() {
                     win.close();
                 }
                 return glib::Propagation::Stop;

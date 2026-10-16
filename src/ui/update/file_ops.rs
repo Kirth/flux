@@ -13,6 +13,10 @@ pub(super) fn handle(
         AppMsg::Copy => app.handle_copy_or_cut(false, sender),
         AppMsg::Cut => app.handle_copy_or_cut(true, sender),
         AppMsg::Escape => {
+            if app.sidebar_overlay_open {
+                app.close_sidebar_overlay();
+                return Ok(());
+            }
             // Cancelling a cut must not also reload the folder (that drops the selection).
             if !app.handle_cancel_cut() {
                 sender.input(AppMsg::UpdateFilter(String::new()));
@@ -61,6 +65,9 @@ pub(super) fn handle(
         AppMsg::PromptNewFolder => app.show_prompt_new_folder(sender),
         AppMsg::PromptNewFile => app.show_prompt_new_file(sender),
         AppMsg::OpenFileProperties(path) => app.open_properties_window(path),
+        AppMsg::OpenNewWindow => {
+            crate::utils::helpers::open_new_instance(&app.current_path);
+        }
         AppMsg::ShowProperties => {
             let target = app
                 .get_selected_path()

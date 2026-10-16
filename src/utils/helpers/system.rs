@@ -1,6 +1,7 @@
 //! Process spawning, editor launch and resource registration.
 
 use gtk::gio;
+use gtk::prelude::*;
 use relm4::prelude::*;
 use std::path::Path;
 
@@ -8,6 +9,11 @@ use std::path::Path;
 ///
 /// Uses the running executable path rather than a hardcoded binary name so
 /// dev builds (`flux-fm`) and installed builds (`flux`) both work correctly.
+///
+/// Launched through GIO with the display's launch context so the new window gets
+/// an xdg-activation token, like an app started from a launcher. Without one, niri
+/// treats it as part of the spawning window's column (stacked under it at its
+/// default height) instead of opening a column of its own.
 ///
 /// Returns `false` if the path is not a directory or the exe path cannot be
 /// resolved, `true` if the child process was spawned successfully.
@@ -18,7 +24,21 @@ pub fn open_new_instance(path: &std::path::Path) -> bool {
     let Ok(exe) = std::env::current_exe() else {
         return false;
     };
-    std::process::Command::new(exe).arg(path).spawn().is_ok()
+    let commandline = format!(
+        "{} {}",
+        gtk::glib::shell_quote(&exe).to_string_lossy(),
+        gtk::glib::shell_quote(path).to_string_lossy()
+    );
+    let launched = gio::AppInfo::create_from_commandline(
+        &commandline,
+        Some("flux"),
+        gio::AppInfoCreateFlags::SUPPORTS_STARTUP_NOTIFICATION,
+    )
+    .and_then(|app| {
+        let context = gtk::gdk::Display::default().map(|d| d.app_launch_context());
+        app.launch(&[], context.as_ref())
+    });
+    launched.is_ok() || std::process::Command::new(exe).arg(path).spawn().is_ok()
 }
 
 /// Spawns the user-configured editor detached without task queue overhead or progress dialogs.

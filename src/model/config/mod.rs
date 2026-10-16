@@ -23,6 +23,10 @@ pub struct Config {
     /// A collection of user-defined bookmarks and places for the sidebar.
     #[serde(default)]
     pub sidebar: Vec<CustomPlace>,
+    /// Plain jump links shown at the top of the sidebar (`[[quick_links]]`): they
+    /// navigate on click and, unlike `sidebar` entries, never expand into a tree.
+    #[serde(default)]
+    pub quick_links: Vec<CustomPlace>,
     /// Custom keybindings for navigating and managing files.
     #[serde(default)]
     pub shortcuts: ShortcutsConfig,

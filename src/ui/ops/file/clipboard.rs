@@ -97,6 +97,14 @@ impl FluxApp {
         {
             window.set_transient_for(Some(&parent));
             window.set_modal(true);
+            // As wide as the main window comfortably allows, so sections sit side by side.
+            let (pw, ph) = (parent.width(), parent.height());
+            if pw > 0 && ph > 0 {
+                window.set_default_size(
+                    (pw * 4 / 5).clamp(480, 980),
+                    (ph * 85 / 100).clamp(420, 760),
+                );
+            }
         }
         window.present();
     }

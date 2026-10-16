@@ -7,7 +7,7 @@ use std::path::PathBuf;
 impl FluxApp {
     /// Displays a modal prompt to create a new sidebar section header.
     pub fn show_prompt_new_sidebar_section(&self, sender: &relm4::AsyncComponentSender<Self>) {
-        let parent = gtk::Application::default().active_window();
+        let parent = relm4::main_application().active_window();
         let s = sender.clone();
 
         let dialog = gtk::MessageDialog::new(
@@ -55,7 +55,7 @@ impl FluxApp {
         current_name: String,
         sender: &relm4::AsyncComponentSender<Self>,
     ) {
-        let parent = gtk::Application::default().active_window();
+        let parent = relm4::main_application().active_window();
         let s = sender.clone();
 
         let dialog = gtk::MessageDialog::new(
@@ -134,7 +134,7 @@ impl FluxApp {
         current_name: String,
         sender: &AsyncComponentSender<Self>,
     ) {
-        let parent = gtk::Application::default().active_window();
+        let parent = relm4::main_application().active_window();
         let s = sender.clone();
 
         let dialog = gtk::MessageDialog::new(
@@ -303,7 +303,11 @@ impl FluxApp {
                                 let path_trimmed = path_str.trim_end_matches('/').to_string();
 
                                 let mut matched = false;
-                                for place in &mut config.sidebar {
+                                for place in config
+                                    .sidebar
+                                    .iter_mut()
+                                    .chain(config.quick_links.iter_mut())
+                                {
                                     if Self::expand_path(&place.path) == target_path_clone {
                                         place.icon = name.to_string();
                                         matched = true;

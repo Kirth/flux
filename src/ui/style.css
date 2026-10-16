@@ -1390,6 +1390,35 @@ row:selected {
   color: @theme_fg_color;
 }
 
+/* compact key/value rows in the Properties window */
+.flux-prop-row {
+  min-height: 0;
+  padding: 0.35em 0.75em;
+}
+
+.flux-prop-row .flux-prop-key {
+  font-size: 0.9em;
+}
+
+.flux-prop-row .flux-prop-copy {
+  opacity: 0;
+}
+
+.flux-prop-row:hover .flux-prop-copy,
+.flux-prop-row:focus-visible .flux-prop-copy {
+  opacity: 0.6;
+}
+
+.flux-prop-chart {
+  padding: 1em 1.5em;
+}
+
+.flux-prop-swatch {
+  min-width: 10px;
+  min-height: 10px;
+  border-radius: 3px;
+}
+
 /* ── settings and preferences ── */
 window.settings-window,
 adwpreferenceswindow,
@@ -1824,6 +1853,11 @@ dropdown image {
 }
 
 /* ── compact (narrow window) layout ── */
+/* breadcrumbs moved under a header that's too narrow for them */
+.flux-path-bar {
+  padding: 0 0.5em 0.4em;
+}
+
 .flux-compact headerbar {
   padding-left: 0.3em;
   padding-right: 0.3em;
@@ -1926,4 +1960,14 @@ tabbar.flux-tab-bar tab image {
 
 .flux-panes.flux-split .flux-pane:not(.flux-pane-active) gridview {
   opacity: 0.72;
+}
+
+/* Sidebar floating over the files in narrow windows (F8 / header button). */
+.sidebar.flux-sidebar-overlay {
+  background-color: @window_bg_color;
+  box-shadow: 0 0.4em 2em rgba(0, 0, 0, 0.55);
+}
+
+.flux-sidebar-scrim {
+  background-color: rgba(0, 0, 0, 0.35);
 }

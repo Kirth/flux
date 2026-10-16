@@ -14,7 +14,7 @@ impl FluxApp {
         sender: &AsyncComponentSender<Self>,
     ) {
         self.archive_locked = true;
-        let parent = gtk::Application::default().active_window();
+        let parent = relm4::main_application().active_window();
         let s = sender.clone();
 
         let title = if wrong_password {
@@ -81,7 +81,7 @@ impl FluxApp {
         inner_path: String,
         sender: &AsyncComponentSender<Self>,
     ) {
-        let parent = gtk::Application::default().active_window();
+        let parent = relm4::main_application().active_window();
         let s = sender.clone();
 
         let file_name = Path::new(&inner_path)

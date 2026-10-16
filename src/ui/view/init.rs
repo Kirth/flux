@@ -8,8 +8,9 @@ use gtk::glib::{self};
 use relm4::prelude::*;
 use std::path::PathBuf;
 
-/// Smallest window width flux allows.
+/// Smallest window size flux allows.
 const MIN_WINDOW_WIDTH: i32 = 200;
+const MIN_WINDOW_HEIGHT: i32 = 200;
 /// Below this content width the header and status bar switch to compact mode
 /// (the full header needs ~530px).
 const COMPACT_BREAKPOINT_PX: i32 = 560;
@@ -396,10 +397,27 @@ impl FluxApp {
     /// `width_request`, so the window can shrink to [`MIN_WINDOW_WIDTH`].
     pub(super) fn setup_breakpoints(
         model: &mut FluxApp,
+        widgets: &FluxAppWidgets,
         root: &adw::Window,
         sender: &AsyncComponentSender<Self>,
     ) {
+        // With breakpoints, AdwWindow's minimum is its width/height request; an unset
+        // height falls back to the content's (tall) minimum, so a tiling compositor's
+        // smaller height would be refused and the window kept at its default size.
         root.set_width_request(MIN_WINDOW_WIDTH);
+        root.set_height_request(MIN_WINDOW_HEIGHT);
+
+        // Hide the sidebar right in the breakpoint callback, not only via the queued
+        // message: the first layout at the new (narrow) size must already exclude it,
+        // or it is allocated below its minimum and the window overflows its tile.
+        let hide_sidebar = {
+            let sidebar = widgets.sidebar_box.clone();
+            let handle = widgets.sidebar_resize_handle.clone();
+            move || {
+                sidebar.set_visible(false);
+                handle.set_visible(false);
+            }
+        };
 
         let max_width = |px: f64| {
             adw::BreakpointCondition::new_length(
@@ -414,7 +432,11 @@ impl FluxApp {
         )));
         {
             let (on, off) = (sender.clone(), sender.clone());
-            sidebar_bp.connect_apply(move |_| on.input(AppMsg::SetSidebarAutoHidden(true)));
+            let hide = hide_sidebar.clone();
+            sidebar_bp.connect_apply(move |_| {
+                hide();
+                on.input(AppMsg::SetSidebarAutoHidden(true));
+            });
             sidebar_bp.connect_unapply(move |_| off.input(AppMsg::SetSidebarAutoHidden(false)));
         }
         root.add_breakpoint(sidebar_bp.clone());
@@ -423,10 +445,36 @@ impl FluxApp {
         let compact_bp = adw::Breakpoint::new(max_width(COMPACT_BREAKPOINT_PX as f64));
         {
             let (on, off) = (sender.clone(), sender.clone());
-            compact_bp.connect_apply(move |_| on.input(AppMsg::SetCompact(true)));
+            let hide = hide_sidebar.clone();
+            compact_bp.connect_apply(move |_| {
+                hide();
+                on.input(AppMsg::SetCompact(true));
+            });
             compact_bp.connect_unapply(move |_| off.input(AppMsg::SetCompact(false)));
         }
         root.add_breakpoint(compact_bp);
+    }
+
+    /// Dimmed backdrop behind the floating sidebar; clicking it closes the sidebar.
+    fn build_sidebar_scrim(
+        overlay: &gtk::Overlay,
+        sender: &AsyncComponentSender<Self>,
+    ) -> gtk::Widget {
+        let scrim = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        scrim.add_css_class("flux-sidebar-scrim");
+        scrim.set_hexpand(true);
+        scrim.set_vexpand(true);
+        scrim.set_visible(false);
+        let click = gtk::GestureClick::new();
+        click.set_button(0);
+        let sender = sender.clone();
+        click.connect_pressed(move |gesture, _, _, _| {
+            gesture.set_state(gtk::EventSequenceState::Claimed);
+            sender.input(AppMsg::CloseSidebarOverlay);
+        });
+        scrim.add_controller(click);
+        overlay.add_overlay(&scrim);
+        scrim.upcast()
     }
 
     /// Stores widget handles on the model and tracks the terminal pane height.
@@ -437,6 +485,25 @@ impl FluxApp {
     ) {
         model.context_menu_popover.set_parent(&widgets.grid_overlay);
         model.sidebar_widget = Some(widgets.sidebar_box.clone().upcast());
+        model.main_overlay = Some(widgets.main_overlay.clone());
+        model.main_box = Some(widgets.main_box.clone());
+        model.sidebar_scrim = Some(Self::build_sidebar_scrim(&widgets.main_overlay, sender));
+        {
+            // Escape inside the floating sidebar puts it away.
+            let key = gtk::EventControllerKey::new();
+            let sender = sender.clone();
+            key.connect_key_pressed(move |ctrl, keyval, _, _| {
+                let floating = ctrl
+                    .widget()
+                    .is_some_and(|w| w.has_css_class("flux-sidebar-overlay"));
+                if floating && keyval == gtk::gdk::Key::Escape {
+                    sender.input(AppMsg::CloseSidebarOverlay);
+                    return glib::Propagation::Stop;
+                }
+                glib::Propagation::Proceed
+            });
+            widgets.sidebar_box.add_controller(key);
+        }
         model.terminal_paned = Some(widgets.main_paned.clone());
         model.search_panel_revealer = Some(widgets.search_panel_revealer.clone());
         model.tag_panel_revealer = Some(widgets.tag_panel_revealer.clone());
@@ -515,10 +582,15 @@ impl FluxApp {
 
     /// Applies window size, maximize state, resources and the terminal widget.
     pub(super) fn setup_window(model: &FluxApp, widgets: &FluxAppWidgets, root: &adw::Window) {
-        root.set_default_size(
-            model.config.ui.startup_window_width,
-            model.config.ui.startup_window_height,
-        );
+        // Normally set before mapping (see `connect_window_added` in cli/launch.rs).
+        // On a mapped window this would be a resize request that fights a tiling
+        // compositor's size, so only apply it if the window isn't shown yet.
+        if !root.is_mapped() {
+            root.set_default_size(
+                model.config.ui.startup_window_width,
+                model.config.ui.startup_window_height,
+            );
+        }
 
         if model.config.ui.start_maximized {
             root.maximize();

@@ -252,6 +252,7 @@ path = "search://"
                     content_search_max_file_mb: 128,
                 },
                 sidebar: vec![],
+                quick_links: vec![],
                 shortcuts: crate::model::ShortcutsConfig::default(),
                 network_bookmarks: vec![],
                 default_list_mode: false,

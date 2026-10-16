@@ -606,11 +606,40 @@ impl FluxApp {
             &action_group,
             "show-properties",
             sender,
-            properties_target,
+            properties_target.clone(),
             None,
             |s, target, _| s.input(AppMsg::OpenFileProperties(target)),
         );
         let properties_section = gio::Menu::new();
+
+        // Folders can be added to (or removed from) the sidebar's shortcut links.
+        if properties_target.is_dir() {
+            let is_link = self.is_quick_link(&properties_target);
+            let (link_action, _) = register_path_action(
+                &action_group,
+                if is_link {
+                    "remove-quick-link"
+                } else {
+                    "add-quick-link"
+                },
+                sender,
+                properties_target.clone(),
+                None,
+                move |s, target, _| {
+                    s.input(if is_link {
+                        AppMsg::RemoveQuickLink(target)
+                    } else {
+                        AppMsg::AddQuickLink(target)
+                    })
+                },
+            );
+            let label = if is_link {
+                crate::i18n::tr("Remove from Shortcuts")
+            } else {
+                crate::i18n::tr("Add to Shortcuts")
+            };
+            properties_section.append(Some(&label), Some(&link_action));
+        }
         let properties_item = gio::MenuItem::new(
             Some(&crate::i18n::tr("Properties")),
             Some(&properties_action),

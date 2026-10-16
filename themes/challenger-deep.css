@@ -469,3 +469,14 @@ windowcontrols button.close:hover {
 *:focus-visible {
   outline-color: alpha(@cd_violet, 0.7);
 }
+
+/* Sidebar floating over the files in narrow windows: opaque so files don't show through. */
+.sidebar.flux-sidebar-overlay {
+  background-color: alpha(@cd_deep, 0.97);
+  border-color: alpha(@cd_violet, 0.25);
+  box-shadow: 0 6px 28px alpha(black, 0.6);
+}
+
+.flux-sidebar-scrim {
+  background-color: alpha(@cd_deep, 0.45);
+}

@@ -74,7 +74,7 @@ pub fn create_transfer_dialog(
         .resizable(false)
         .build();
 
-    if let Some(parent) = gtk::Application::default().active_window() {
+    if let Some(parent) = relm4::main_application().active_window() {
         window.set_transient_for(Some(&parent));
     }
 

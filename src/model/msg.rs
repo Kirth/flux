@@ -553,6 +553,8 @@ pub enum AppMsg {
     },
     #[allow(dead_code)]
     OpenFileProperties(PathBuf),
+    /// Ctrl+N: open a new flux window at the current folder.
+    OpenNewWindow,
     /// Alt+Enter: properties for the selection, or the current folder if none.
     ShowProperties,
     /// Update the current path and refresh the file list.
@@ -618,6 +620,10 @@ pub enum AppMsg {
     ToggleListColumn(String),
     /// Persist a resized list-view column width (key, pixels).
     SetListColumnWidth(String, i32),
+    /// Add a folder to the sidebar's plain shortcut links (`[[quick_links]]`).
+    AddQuickLink(PathBuf),
+    /// Remove a sidebar shortcut link.
+    RemoveQuickLink(PathBuf),
     /// Expand or collapse the sidebar tree row at `index`.
     SidebarToggleExpand(relm4::factory::DynamicIndex),
     /// Unfold the sidebar tree row at `index` if it is collapsed (row was clicked).
@@ -849,6 +855,8 @@ pub enum AppMsg {
     ShowAbout,
     /// Toggles the visibility of the sidebar.
     ToggleSidebar,
+    /// Puts the floating (narrow-window) sidebar away, if it's out.
+    CloseSidebarOverlay,
     /// Toggles the global thumbnail generation setting.
     ///
     /// When disabled, no thumbnails are generated for any file type, improving

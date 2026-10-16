@@ -12,50 +12,84 @@ use std::path::Path;
 /// A section title plus its `(label, value)` rows.
 pub(super) type SectionData = (String, Vec<(String, String)>);
 
+/// Bytes per [`FileCategory`](crate::services::thumbnails::FileCategory), in `ALL` order.
+pub(super) type CategoryBytes = [u64; 7];
+
+/// Which tab of the Properties window a section is shown on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Tab {
+    General,
+    Details,
+    Git,
+}
+
+impl Tab {
+    pub(super) const ALL: [Tab; 3] = [Tab::General, Tab::Details, Tab::Git];
+}
+
+/// Everything [`build_sections`] found: tagged sections and, for folders, the
+/// direct-contents breakdown for the chart.
+pub(super) struct Built {
+    pub sections: Vec<(Tab, SectionData)>,
+    pub contents_by_category: Option<CategoryBytes>,
+}
+
+/// Result of the recursive folder walk.
+#[derive(Debug)]
+pub struct FolderTotal {
+    pub section: SectionData,
+    pub by_category: CategoryBytes,
+}
+
 /// Assembles every metadata section for `path`.
 ///
 /// `mime_type` is pre-computed by the caller (it's used elsewhere too), and
 /// `file_content` is the first 1 MiB of the file (or empty if unreadable).
-pub(super) fn build_sections(
-    path: &Path,
-    mime_type: &str,
-    file_content: &[u8],
-) -> Vec<SectionData> {
+pub(super) fn build_sections(path: &Path, mime_type: &str, file_content: &[u8]) -> Built {
     let filename = path
         .file_name()
         .unwrap_or_default()
         .to_string_lossy()
         .to_string();
 
-    let mut sections_data: Vec<SectionData> = Vec::new();
+    let mut sections_data: Vec<(Tab, SectionData)> = Vec::new();
+    let mut contents_by_category = None;
 
     if path.is_dir() {
         sections_data.push((
-            tr("Folder"),
-            vec![
-                (tr("Name"), filename.clone()),
-                (
-                    tr("Location"),
-                    path.parent()
-                        .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_default(),
-                ),
-            ],
+            Tab::General,
+            (
+                tr("Folder"),
+                vec![
+                    (tr("Name"), filename.clone()),
+                    (
+                        tr("Location"),
+                        path.parent()
+                            .map(|p| p.to_string_lossy().to_string())
+                            .unwrap_or_default(),
+                    ),
+                ],
+            ),
         ));
-        sections_data.push(folder_contents_section(path));
+        let (contents, by_category) = folder_contents_section(path);
+        sections_data.push((Tab::General, contents));
+        contents_by_category = Some(by_category);
     } else {
         sections_data.push((
-            tr("File Identity"),
-            vec![
-                (tr("Filename"), filename),
-                (
-                    tr("Extension"),
-                    path.extension()
-                        .map(|e| e.to_string_lossy().to_string())
-                        .unwrap_or(tr("None")),
-                ),
-                (tr("MIME Type"), mime_type.to_string()),
-            ],
+            Tab::General,
+            (
+                tr("File Identity"),
+                vec![
+                    (tr("Filename"), filename),
+                    (
+                        tr("Extension"),
+                        path.extension()
+                            .map(|e| e.to_string_lossy().to_string())
+                            .unwrap_or(tr("None")),
+                    ),
+                    (tr("MIME Type"), mime_type.to_string()),
+                ],
+            ),
         ));
     }
 
@@ -63,18 +97,21 @@ pub(super) fn build_sections(
     if path.is_symlink() {
         if let Ok(target) = fs::read_link(path) {
             sections_data.push((
-                tr("Symlink Info"),
-                vec![
-                    (tr("Target"), target.to_string_lossy().to_string()),
-                    (tr("Broken"), (!target.exists()).to_string()),
-                    (
-                        tr("Canonical"),
-                        path.canonicalize()
-                            .unwrap_or_default()
-                            .to_string_lossy()
-                            .to_string(),
-                    ),
-                ],
+                Tab::Details,
+                (
+                    tr("Symlink Info"),
+                    vec![
+                        (tr("Target"), target.to_string_lossy().to_string()),
+                        (tr("Broken"), (!target.exists()).to_string()),
+                        (
+                            tr("Canonical"),
+                            path.canonicalize()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .to_string(),
+                        ),
+                    ],
+                ),
             ));
         }
     }
@@ -91,7 +128,7 @@ pub(super) fn build_sections(
             }
         }
         if !xattrs_list.is_empty() {
-            sections_data.push((tr("Extended Attributes"), xattrs_list));
+            sections_data.push((Tab::Details, (tr("Extended Attributes"), xattrs_list)));
         }
     }
 
@@ -119,7 +156,7 @@ pub(super) fn build_sections(
                 system_disk.push((tr("FS Type"), parts[2].to_string()));
             }
         }
-        sections_data.push((tr("System & Disk"), system_disk));
+        sections_data.push((Tab::Details, (tr("System & Disk"), system_disk)));
 
         let fmt_time = |t: std::time::SystemTime| -> String {
             let dt: DateTime<Local> = t.into();
@@ -127,21 +164,24 @@ pub(super) fn build_sections(
         };
 
         sections_data.push((
-            tr("Temporal"),
-            vec![
-                (
-                    tr("Created"),
-                    meta.created().map(fmt_time).unwrap_or_default(),
-                ),
-                (
-                    tr("Modified"),
-                    meta.modified().map(fmt_time).unwrap_or_default(),
-                ),
-                (
-                    tr("Accessed"),
-                    meta.accessed().map(fmt_time).unwrap_or_default(),
-                ),
-            ],
+            Tab::General,
+            (
+                tr("Temporal"),
+                vec![
+                    (
+                        tr("Created"),
+                        meta.created().map(fmt_time).unwrap_or_default(),
+                    ),
+                    (
+                        tr("Modified"),
+                        meta.modified().map(fmt_time).unwrap_or_default(),
+                    ),
+                    (
+                        tr("Accessed"),
+                        meta.accessed().map(fmt_time).unwrap_or_default(),
+                    ),
+                ],
+            ),
         ));
 
         let mut security = vec![
@@ -174,13 +214,13 @@ pub(super) fn build_sections(
                 .collect::<String>();
             security.push((tr("SHA256"), hash_hex));
         }
-        sections_data.push((tr("Security"), security));
+        sections_data.push((Tab::Details, (tr("Security"), security)));
     }
 
     // ── ELF analysis ────────────────────────────────────────────────────────
     if mime_type.contains("executable") || mime_type.contains("sharedlib") {
         if let Some(elf) = get_elf_info(path) {
-            sections_data.push((tr("Executable Analysis"), elf));
+            sections_data.push((Tab::Details, (tr("Executable Analysis"), elf)));
         }
     }
 
@@ -196,7 +236,7 @@ pub(super) fn build_sections(
         .unwrap_or(false);
     if (is_text || has_text_ext) && !file_content.is_empty() {
         if let Some(metrics) = get_text_metrics(file_content) {
-            sections_data.push((tr("Content Metrics"), metrics));
+            sections_data.push((Tab::General, (tr("Content Metrics"), metrics)));
         }
     }
 
@@ -204,30 +244,36 @@ pub(super) fn build_sections(
     if mime_type.starts_with("image/") {
         if let Ok(dim) = imagesize::size(path) {
             sections_data.push((
-                tr("Visual Media"),
-                vec![
-                    (tr("Dimensions"), format!("{}x{}", dim.width, dim.height)),
-                    (
-                        tr("Aspect Ratio"),
-                        format!("{:.2}:1", dim.width as f64 / dim.height as f64),
-                    ),
-                ],
+                Tab::General,
+                (
+                    tr("Visual Media"),
+                    vec![
+                        (tr("Dimensions"), format!("{}x{}", dim.width, dim.height)),
+                        (
+                            tr("Aspect Ratio"),
+                            format!("{:.2}:1", dim.width as f64 / dim.height as f64),
+                        ),
+                    ],
+                ),
             ));
         }
     }
 
     // ── Git history ─────────────────────────────────────────────────────────
     if let Some(git) = get_git_info(path) {
-        sections_data.push((tr("Git History"), git));
+        sections_data.push((Tab::Git, (tr("Git History"), git)));
     }
 
     let _ = utils::media::get_mime_type; // keep the `utils` import live for callers
 
-    sections_data
+    Built {
+        sections: sections_data,
+        contents_by_category,
+    }
 }
 
 /// Rows for a breakdown of bytes per file category, largest first.
-fn category_rows(by_category: &[u64; 7]) -> Vec<(String, String)> {
+fn category_rows(by_category: &CategoryBytes) -> Vec<(String, String)> {
     use crate::services::thumbnails::FileCategory;
     let mut parts: Vec<(FileCategory, u64)> = FileCategory::ALL
         .iter()
@@ -243,7 +289,7 @@ fn category_rows(by_category: &[u64; 7]) -> Vec<(String, String)> {
 }
 
 /// Direct contents of a folder: entry count, size of the files in it, and by type.
-fn folder_contents_section(path: &Path) -> SectionData {
+fn folder_contents_section(path: &Path) -> (SectionData, CategoryBytes) {
     let stats = crate::services::thumbnails::scan_folder(path, true, false).stats;
     let more = if stats.truncated { "≥" } else { "" };
     let mut rows = vec![
@@ -258,7 +304,7 @@ fn folder_contents_section(path: &Path) -> SectionData {
         ),
     ];
     rows.extend(category_rows(&stats.by_category));
-    (tr("Contents"), rows)
+    ((tr("Contents"), rows), stats.by_category)
 }
 
 /// Placeholder shown until [`folder_total_section`] finishes.
@@ -272,7 +318,7 @@ pub(super) fn folder_total_placeholder() -> SectionData {
 /// Everything below a folder, walked recursively (symlinks not followed). Stops after
 /// a couple of million entries or ~20 s so huge trees still return; then values are
 /// marked with "≥". Runs off the main thread.
-pub(super) fn folder_total_section(path: &Path) -> SectionData {
+pub(super) fn folder_total_section(path: &Path) -> FolderTotal {
     use crate::services::thumbnails::{categorize, FileCategory};
     const MAX_ENTRIES: u64 = 2_000_000;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
@@ -319,5 +365,8 @@ pub(super) fn folder_total_section(path: &Path) -> SectionData {
         (tr("Folders"), format!("{more}{dirs}")),
     ];
     rows.extend(category_rows(&by_category));
-    (tr("Total (including subfolders)"), rows)
+    FolderTotal {
+        section: (tr("Total (including subfolders)"), rows),
+        by_category,
+    }
 }

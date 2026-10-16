@@ -103,6 +103,49 @@ impl FluxApp {
         self.sync_sidebar_selection();
     }
 
+    /// Adds `path` to the plain shortcut links at the top of the sidebar.
+    pub fn handle_add_quick_link(&mut self, path: PathBuf) {
+        let exists = self
+            .config
+            .quick_links
+            .iter()
+            .any(|l| Self::expand_path(&l.path) == path);
+        if exists || !path.is_dir() {
+            return;
+        }
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.to_string_lossy().into_owned());
+        self.config.quick_links.push(crate::model::CustomPlace {
+            name,
+            kind: None,
+            icon: "folder-symbolic".to_string(),
+            path: path.to_string_lossy().into_owned(),
+        });
+        utils::save_config(&self.config);
+        self.refresh_sidebar();
+    }
+
+    pub fn handle_remove_quick_link(&mut self, path: PathBuf) {
+        let before = self.config.quick_links.len();
+        self.config
+            .quick_links
+            .retain(|l| Self::expand_path(&l.path) != path);
+        if self.config.quick_links.len() != before {
+            utils::save_config(&self.config);
+            self.refresh_sidebar();
+        }
+    }
+
+    /// Whether `path` is one of the sidebar shortcut links.
+    pub fn is_quick_link(&self, path: &std::path::Path) -> bool {
+        self.config
+            .quick_links
+            .iter()
+            .any(|l| Self::expand_path(&l.path) == path)
+    }
+
     /// Removes a custom location from the sidebar configuration.
     pub fn handle_remove_from_sidebar(&mut self, path: PathBuf) {
         let path_str = path.to_string_lossy();
@@ -312,6 +355,15 @@ impl FluxApp {
     }
 
     pub fn handle_toggle_sidebar(&mut self) {
+        // Too narrow to dock it: float the sidebar over the files instead.
+        if self.sidebar_auto_hidden || self.compact || self.sidebar_overlay_open {
+            if self.sidebar_overlay_open {
+                self.close_sidebar_overlay();
+            } else {
+                self.open_sidebar_overlay();
+            }
+            return;
+        }
         self.sidebar_visible = !self.sidebar_visible;
         self.config.ui.sidebar_visible = self.sidebar_visible;
         crate::utils::save_config(&self.config);
@@ -365,5 +417,51 @@ impl FluxApp {
             crate::utils::save_config(&self.config);
             self.refresh_sidebar();
         }
+    }
+
+    /// Moves the sidebar out of the layout and floats it over the files, with a scrim
+    /// behind it that closes it on click.
+    pub fn open_sidebar_overlay(&mut self) {
+        let (Some(sidebar), Some(overlay), Some(scrim)) = (
+            &self.sidebar_widget,
+            &self.main_overlay,
+            &self.sidebar_scrim,
+        ) else {
+            return;
+        };
+        if self.sidebar_overlay_open {
+            return;
+        }
+        sidebar.unparent();
+        sidebar.set_halign(gtk::Align::Start);
+        sidebar.add_css_class("flux-sidebar-overlay");
+        overlay.add_overlay(sidebar);
+        scrim.set_visible(true);
+        sidebar.set_visible(true);
+        self.sidebar_overlay_open = true;
+        sidebar.child_focus(gtk::DirectionType::TabForward);
+    }
+
+    /// Puts the floating sidebar back in its place in the layout (hidden while narrow).
+    pub fn close_sidebar_overlay(&mut self) {
+        if !self.sidebar_overlay_open {
+            return;
+        }
+        self.sidebar_overlay_open = false;
+        let (Some(sidebar), Some(overlay), Some(main_box), Some(scrim)) = (
+            &self.sidebar_widget,
+            &self.main_overlay,
+            &self.main_box,
+            &self.sidebar_scrim,
+        ) else {
+            return;
+        };
+        scrim.set_visible(false);
+        overlay.remove_overlay(sidebar);
+        sidebar.remove_css_class("flux-sidebar-overlay");
+        sidebar.set_halign(gtk::Align::Fill);
+        main_box.prepend(sidebar);
+        sidebar.set_visible(self.sidebar_visible && !self.sidebar_auto_hidden && !self.compact);
+        self.files.view.grab_focus();
     }
 }

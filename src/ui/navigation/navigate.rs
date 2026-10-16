@@ -12,6 +12,8 @@ impl FluxApp {
     // may resolve relative paths incorrectly, moving files to previous locations
     // instead of the directory currently displayed to the user.
     pub fn handle_navigate(&mut self, path: PathBuf, sender: &AsyncComponentSender<Self>) {
+        // Picking a place in the floating (narrow-window) sidebar puts it away.
+        self.close_sidebar_overlay();
         let path_str = path.to_string_lossy();
 
         // Intercept panel toggles before touching any current state or running resets

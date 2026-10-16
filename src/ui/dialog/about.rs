@@ -19,7 +19,7 @@ impl FluxApp {
             .resizable(false)
             .build();
 
-        if let Some(window) = gtk::Application::default().active_window() {
+        if let Some(window) = relm4::main_application().active_window() {
             about.set_transient_for(Some(&window));
         }
 

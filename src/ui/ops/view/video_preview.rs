@@ -6,11 +6,36 @@ use adw::prelude::*;
 use gtk::glib;
 use relm4::prelude::*;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 const VIDEO_PREVIEW_LAUNCH_LIMIT: usize = 5;
 const VIDEO_PREVIEW_LAUNCH_WINDOW: Duration = Duration::from_secs(1);
 const VIDEO_PREVIEW_COOLDOWN: Duration = Duration::from_secs(5);
+
+/// Whether GStreamer can play video in this process.
+///
+/// GtkMediaFile's player aborts the whole process (a fatal `g_error`) when GStreamer
+/// has no `playbin3`, e.g. when flux is started on NixOS without
+/// `GST_PLUGIN_SYSTEM_PATH_1_0`, so previews must check before creating one.
+fn video_playback_available() -> bool {
+    static AVAILABLE: OnceLock<bool> = OnceLock::new();
+    *AVAILABLE.get_or_init(|| {
+        let ok = gstreamer::init().is_ok() && gstreamer::ElementFactory::find("playbin3").is_some();
+        if !ok {
+            eprintln!(
+                "[flux] GStreamer 'playbin3' not found - video previews disabled \
+                 (is GST_PLUGIN_SYSTEM_PATH_1_0 set?)"
+            );
+            if let Some(s) = crate::model::SENDER.get() {
+                let _ = s.send(AppMsg::ShowToast(tr(
+                    "Video previews unavailable: GStreamer plugins not found",
+                )));
+            }
+        }
+        ok
+    })
+}
 
 impl FluxApp {
     /// Finds the grid cell widget that is currently showing the given file path.
@@ -129,7 +154,7 @@ impl FluxApp {
 
         let selected_path = selection[0].clone();
         let (_, is_vid) = utils::media::is_visual_media(&selected_path);
-        if !is_vid {
+        if !is_vid || !video_playback_available() {
             self.stop_video_preview();
             return;
         }
@@ -236,6 +261,10 @@ impl FluxApp {
         let Some(gfile) = resolved_file else {
             return;
         };
+
+        if !video_playback_available() {
+            return;
+        }
 
         if let Some(child) = self.find_widget_by_path(&path) {
             let Some(image) = Self::preview_image(&child) else {

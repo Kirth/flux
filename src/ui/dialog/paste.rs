@@ -11,7 +11,7 @@ impl FluxApp {
         is_cut: bool,
         sender: &AsyncComponentSender<Self>,
     ) {
-        let window = gtk::Application::default().active_window();
+        let window = relm4::main_application().active_window();
         let body = if conflicts.len() == 1 {
             format!(
                 "\"{}\" already exists in this location. Replace it and merge its contents?",

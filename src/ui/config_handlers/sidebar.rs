@@ -41,7 +41,12 @@ impl FluxApp {
     ) {
         let mut modified = false;
 
-        for place in &mut self.config.sidebar {
+        let config = &mut self.config;
+        for place in config
+            .sidebar
+            .iter_mut()
+            .chain(config.quick_links.iter_mut())
+        {
             let expanded = Self::expand_path(&place.path);
             if expanded == path {
                 place.name = new_name.clone();

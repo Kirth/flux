@@ -190,7 +190,7 @@ impl FluxApp {
         let canonical = current.canonicalize().ok();
 
         let is_dir_root = |p: &crate::ui::SidebarPlace| {
-            p.depth == 0 && !p.is_section_label && !is_virtual_sidebar_path(&p.path)
+            p.depth == 0 && !p.is_section_label && !p.is_link && !is_virtual_sidebar_path(&p.path)
         };
 
         // Exact match: prefer the configured places, then any already-expanded subfolder.
@@ -251,7 +251,10 @@ impl FluxApp {
             .iter()
             .enumerate()
             .filter(|(_, p)| {
-                p.depth == 0 && !p.is_section_label && !is_virtual_sidebar_path(&p.path)
+                p.depth == 0
+                    && !p.is_section_label
+                    && !p.is_link
+                    && !is_virtual_sidebar_path(&p.path)
             })
             .map(|(i, p)| (i, p.path.as_path()));
         let Some(mut i) = best_ancestor_root(roots, &target) else {

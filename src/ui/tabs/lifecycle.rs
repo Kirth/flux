@@ -167,7 +167,7 @@ impl FluxApp {
     ) {
         let index = index_opt.unwrap_or(self.active_tab_index);
         if self.tabs.len() <= 1 {
-            if let Some(win) = gtk::Application::default().active_window() {
+            if let Some(win) = relm4::main_application().active_window() {
                 win.close();
             }
             return;

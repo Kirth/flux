@@ -10,7 +10,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-const SCHEMA_VERSION: i64 = 2;
+/// Bumping this discards existing indexes (v3: v2 indexes could hold all of /nix/store).
+const SCHEMA_VERSION: i64 = 3;
 const DELTA_INTERVAL: Duration = Duration::from_secs(300);
 const DELTA_MIN_GAP: Duration = Duration::from_secs(30);
 const DEBOUNCE: Duration = Duration::from_millis(150);
@@ -28,8 +29,14 @@ fn should_index(name: &str) -> bool {
     )
 }
 
+/// System trees that are never worth indexing. `/nix/store` is a separate (bind)
+/// mount on NixOS, so it would otherwise become a root: tens of millions of files.
+fn is_excluded_tree(path: &Path) -> bool {
+    path.starts_with("/run/user") || path.starts_with("/nix")
+}
+
 fn is_indexable(root: &Path, path: &Path) -> bool {
-    if path.starts_with("/run/user") {
+    if is_excluded_tree(path) {
         return false;
     }
     if is_under_wine_root(path) {
@@ -163,6 +170,19 @@ impl SearchIndex {
         }
         let mut conn = Connection::open(db_path)?;
         conn.busy_timeout(Duration::from_secs(5))?;
+        // An index from another schema version is deleted outright: it can be
+        // huge, and dropping its tables would first copy all of it into the WAL.
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        if version != 0 && version != SCHEMA_VERSION {
+            drop(conn);
+            for suffix in ["", "-wal", "-shm"] {
+                let mut file = db_path.as_os_str().to_owned();
+                file.push(suffix);
+                let _ = std::fs::remove_file(file);
+            }
+            conn = Connection::open(db_path)?;
+            conn.busy_timeout(Duration::from_secs(5))?;
+        }
         conn.execute_batch(
             "PRAGMA journal_mode = WAL;
              PRAGMA synchronous = NORMAL;
@@ -348,9 +368,13 @@ fn read_listing(dir: &Path) -> io::Result<(i64, Vec<(String, bool)>)> {
             continue;
         }
         let is_dir = match entry.file_type() {
-            Ok(t) if t.is_symlink() => std::fs::metadata(entry.path())
-                .map(|m| m.is_dir())
-                .unwrap_or(false),
+            // Symlinked dirs are followed, except into excluded trees
+            // (~/.nix-profile, `result` links -> /nix/store).
+            Ok(t) if t.is_symlink() => {
+                let path = entry.path();
+                std::fs::metadata(&path).is_ok_and(|m| m.is_dir())
+                    && !std::fs::canonicalize(&path).is_ok_and(|p| is_excluded_tree(&p))
+            }
             Ok(t) => t.is_dir(),
             Err(_) => false,
         };
@@ -374,8 +398,9 @@ fn collect_index_roots() -> Vec<PathBuf> {
 
         // Synthetic FUSE-backed views under /run/user/<uid> (flatpak
         // document portal, GVFS, etc.) mirror real files and would
-        // otherwise make every file appear twice in the index.
-        if mp.starts_with("/run/user") {
+        // otherwise make every file appear twice in the index; /nix/store
+        // is a read-only bind mount holding millions of package files.
+        if is_excluded_tree(mp) {
             continue;
         }
 

@@ -9,7 +9,7 @@ impl FluxApp {
         image_path: PathBuf,
         sender: &AsyncComponentSender<Self>,
     ) {
-        let parent = gtk::Application::default().active_window();
+        let parent = relm4::main_application().active_window();
         let s = sender.clone();
 
         let dialog = gtk::MessageDialog::new(

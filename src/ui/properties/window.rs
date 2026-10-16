@@ -1,10 +1,12 @@
-use super::section::MetadataSection;
-use super::sections::build_sections;
+use super::chart::CategoryChart;
+use super::page::{Page, Slot};
+use super::sections::{
+    build_sections, folder_total_placeholder, folder_total_section, FolderTotal, SectionData, Tab,
+};
 use crate::i18n::tr;
 use crate::utils;
 use adw::gio;
 use adw::prelude::*;
-use relm4::factory::FactoryVecDeque;
 use relm4::prelude::*;
 use std::fs;
 use std::io::Read;
@@ -12,9 +14,11 @@ use std::path::PathBuf;
 use std::process::Command;
 
 pub struct FileProperties {
-    sections: FactoryVecDeque<MetadataSection>,
-    /// Index of the "Calculating…" placeholder section for folders.
-    total_placeholder: Option<usize>,
+    /// Tabs, in [`Tab::ALL`] order; tabs without sections are skipped.
+    pages: Vec<Page>,
+    /// Page index and slot of the "Calculating…" placeholder for folders.
+    total_placeholder: Option<(usize, Slot)>,
+    chart: Option<CategoryChart>,
     filename: String,
     app_list: Vec<gio::AppInfo>,
     current_mime: String,
@@ -26,7 +30,7 @@ pub enum PropertiesMsg {
     CopyToClipboard(String),
     AppSelected(u32),
     /// The background folder walk finished; replaces the "Calculating…" section.
-    FolderTotal(super::sections::SectionData),
+    FolderTotal(FolderTotal),
 }
 
 #[relm4::component(pub)]
@@ -37,11 +41,12 @@ impl SimpleComponent for FileProperties {
 
     view! {
         adw::Window {
-            set_default_size: (540, 850),
+            set_default_size: (860, 640),
             #[watch] set_title: Some(&format!("{} - {}", tr("Properties"), model.filename)),
 
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
+                #[name = "header"]
                 adw::HeaderBar {
                     set_show_end_title_buttons: false,
                     set_show_start_title_buttons: false,
@@ -49,26 +54,10 @@ impl SimpleComponent for FileProperties {
 
                 #[local_ref]
                 overlay -> adw::ToastOverlay {
-                    gtk::ScrolledWindow {
+                    #[local_ref]
+                    stack -> adw::ViewStack {
                         set_vexpand: true,
-                        set_hscrollbar_policy: gtk::PolicyType::Never,
-
-                        adw::Clamp {
-                            set_maximum_size: 600,
-
-                            gtk::Box {
-                                set_orientation: gtk::Orientation::Vertical,
-                                set_spacing: 24,
-                                set_margin_all: 24,
-
-                                #[local_ref]
-                                app_group -> adw::PreferencesGroup {},
-
-                                #[local_ref]
-                                sections_widget -> gtk::Box {},
-                            }
-                        }
-                    }
+                    },
                 }
             }
         }
@@ -94,41 +83,11 @@ impl SimpleComponent for FileProperties {
             }
         }
 
-        let mut sections_data = build_sections(&path, &mime_type, &file_content);
-
-        // Folders: the recursive total can take a while, so it's filled in later.
-        let total_placeholder = is_dir.then(|| {
-            let idx = sections_data.len().min(2);
-            sections_data.insert(idx, super::sections::folder_total_placeholder());
-            let walk_path = path.clone();
-            let walk_sender = sender.input_sender().clone();
-            std::thread::spawn(move || {
-                let total = super::sections::folder_total_section(&walk_path);
-                let _ = walk_sender.send(PropertiesMsg::FolderTotal(total));
-            });
-            idx
-        });
-
-        let mut sections = FactoryVecDeque::builder()
-            .launch(gtk::Box::new(gtk::Orientation::Vertical, 24))
-            .forward(sender.input_sender(), PropertiesMsg::CopyToClipboard);
-
-        {
-            let mut guard = sections.guard();
-            for (title, items) in sections_data {
-                guard.push_back((title, items));
-            }
-        }
+        let built = build_sections(&path, &mime_type, &file_content);
 
         let toast_overlay = adw::ToastOverlay::new();
 
         let app_group = adw::PreferencesGroup::new();
-        app_group.set_title(&tr("System Handler"));
-        app_group.set_description(Some(&format!(
-            "{} {}",
-            tr("Default application for"),
-            mime_type
-        )));
 
         let mut all_apps: Vec<gio::AppInfo> = gio::AppInfo::all().into_iter().collect();
         all_apps.sort_by_key(|a| a.name().to_lowercase());
@@ -161,6 +120,7 @@ impl SimpleComponent for FileProperties {
 
         let row = adw::ActionRow::builder()
             .title(tr("Open With").as_str())
+            .subtitle(format!("{} {}", tr("Default application for"), mime_type))
             .activatable_widget(&dropdown)
             .build();
         row.add_suffix(&dropdown);
@@ -171,20 +131,94 @@ impl SimpleComponent for FileProperties {
             sender_clone.input(PropertiesMsg::AppSelected(row.selected()));
         });
 
+        let chart = built.contents_by_category.map(CategoryChart::new);
+
+        // Narrow window: stack each page's two columns.
+        let narrow = adw::Breakpoint::new(adw::BreakpointCondition::new_length(
+            adw::BreakpointConditionLengthType::MaxWidth,
+            720.0,
+            adw::LengthUnit::Px,
+        ));
+
+        let stack = adw::ViewStack::new();
+        let mut pages = Vec::new();
+        let mut total_placeholder = None;
+        for tab in Tab::ALL {
+            let mut sections: Vec<SectionData> = built
+                .sections
+                .iter()
+                .filter(|(t, _)| *t == tab)
+                .map(|(_, s)| s.clone())
+                .collect();
+            let mut header: Vec<gtk::Widget> = Vec::new();
+            let mut placeholder = None;
+            if tab == Tab::General {
+                if let Some(chart) = &chart {
+                    header.push(chart.widget().clone().upcast());
+                }
+                header.push(app_group.clone().upcast());
+                // Folders: the recursive total can take a while, so it's filled in later.
+                if is_dir {
+                    let idx = sections.len().min(2);
+                    sections.insert(idx, folder_total_placeholder());
+                    placeholder = Some(idx);
+                }
+            }
+            if sections.is_empty() && header.is_empty() {
+                continue;
+            }
+            let (page, slot) = Page::new(
+                &header,
+                sections,
+                placeholder,
+                sender.input_sender(),
+                &narrow,
+            );
+            let (name, title, icon) = match tab {
+                Tab::General => ("general", tr("General"), "dialog-information-symbolic"),
+                Tab::Details => ("details", tr("Details"), "drive-harddisk-symbolic"),
+                Tab::Git => ("git", tr("Git"), "document-open-recent-symbolic"),
+            };
+            stack.add_titled_with_icon(page.widget(), Some(name), &title, icon);
+            if let Some(slot) = slot {
+                total_placeholder = Some((pages.len(), slot));
+            }
+            pages.push(page);
+        }
+
+        if is_dir {
+            let walk_path = path.clone();
+            let walk_sender = sender.input_sender().clone();
+            std::thread::spawn(move || {
+                let total = folder_total_section(&walk_path);
+                let _ = walk_sender.send(PropertiesMsg::FolderTotal(total));
+            });
+        }
+
         let model = FileProperties {
-            sections,
+            pages,
             total_placeholder,
+            chart,
             filename,
             app_list: all_apps,
             current_mime: mime_type,
             toast_overlay: toast_overlay.clone(),
         };
 
-        let sections_widget: &gtk::Box = model.sections.widget();
         let overlay = &model.toast_overlay;
-        let app_group = &app_group;
+        let stack = &stack;
 
         let widgets = view_output!();
+
+        root.add_breakpoint(narrow);
+        // A single tab needs no switcher; the header then shows the window title.
+        if model.pages.len() > 1 {
+            let switcher = adw::ViewSwitcher::builder()
+                .stack(stack)
+                .policy(adw::ViewSwitcherPolicy::Wide)
+                .build();
+            widgets.header.set_title_widget(Some(&switcher));
+        }
 
         // Escape closes the window (it opens as a modal over flux).
         let keys = gtk::EventControllerKey::new();
@@ -203,16 +237,16 @@ impl SimpleComponent for FileProperties {
 
     fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>) {
         match message {
-            PropertiesMsg::FolderTotal(section) => {
-                let mut guard = self.sections.guard();
-                match self.total_placeholder.take() {
-                    Some(idx) if idx < guard.len() => {
-                        guard.remove(idx);
-                        guard.insert(idx, section);
-                    }
-                    _ => {
-                        guard.push_back(section);
-                    }
+            PropertiesMsg::FolderTotal(total) => {
+                if let Some(chart) = &self.chart {
+                    chart.update(total.by_category);
+                }
+                let (page, slot) = match self.total_placeholder.take() {
+                    Some((page, slot)) => (page, Some(slot)),
+                    None => (0, None),
+                };
+                if let Some(page) = self.pages.get_mut(page) {
+                    page.replace(slot, total.section);
                 }
             }
             PropertiesMsg::CopyToClipboard(text) => {

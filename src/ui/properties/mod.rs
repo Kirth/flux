@@ -1,3 +1,5 @@
+mod chart;
+mod page;
 mod probes;
 mod row;
 mod section;
