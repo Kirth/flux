@@ -94,6 +94,8 @@ pub struct FluxApp {
     pub statusbar_visible: bool,
     /// Tracks whether the file grid scrollable container has reached the bottom boundary.
     pub scrolled_to_bottom: bool,
+    /// Whether keyboard focus was in the file view when the window last went inactive.
+    pub files_focused_on_leave: bool,
     /// Whether the top header bar is currently visible.
     pub header_visible: bool,
     /// Weak or cloned handle to the header bar widget for toggling visibility dynamically.

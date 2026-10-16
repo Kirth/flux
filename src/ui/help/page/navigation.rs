@@ -9,16 +9,20 @@ pub fn build(config: &Config) -> adw::PreferencesPage {
         vec![
             row(
                 &tr("Go back in history"),
-                &sc(config, |s| s.back.clone(), "Backspace"),
+                &with_alt_arrow(sc(config, |s| s.back.clone(), "Backspace"), "Alt + Left"),
             ),
             row(
                 &tr("Go forward in history"),
-                &sc(config, |s| s.forward.clone(), "Alt + Right"),
+                &with_alt_arrow(
+                    sc(config, |s| s.forward.clone(), "Alt + Right"),
+                    "Alt + Right",
+                ),
             ),
             row(
                 &tr("Navigate to home directory"),
                 &sc(config, |s| s.home.clone(), "Ctrl + Home"),
             ),
+            row(&tr("Preview selected file (flux-preview)"), "Space"),
             row(
                 &tr("Open selected file or directory"),
                 &sc(config, |s| s.open.clone(), "Enter"),
@@ -48,4 +52,13 @@ pub fn build(config: &Config) -> adw::PreferencesPage {
         "compass-symbolic",
         vec![nav_group, tabs_group],
     )
+}
+
+/// History also always answers to Alt + arrow, next to the configured key.
+fn with_alt_arrow(keys: String, alt: &str) -> String {
+    if keys == alt {
+        keys
+    } else {
+        format!("{keys}, {alt}")
+    }
 }

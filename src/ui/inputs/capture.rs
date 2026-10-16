@@ -77,6 +77,22 @@ pub fn setup_capture(
                 sender.input(AppMsg::Navigate(home_dir));
                 glib::Propagation::Stop
             }
+            // Space on the files: QuickLook-style preview. Elsewhere (buttons, entries,
+            // the terminal) it keeps its usual meaning.
+            gdk::Key::space
+                if !is_ctrl && !is_alt && !is_shift && !is_editable && !terminal_focused =>
+            {
+                let in_files = ctrl
+                    .widget()
+                    .and_then(|w| w.root())
+                    .and_then(|r| r.focus())
+                    .is_some_and(|f| f.ancestor(gtk::GridView::static_type()).is_some());
+                if !in_files {
+                    return glib::Propagation::Proceed;
+                }
+                sender.input(AppMsg::QuickPreview);
+                glib::Propagation::Stop
+            }
             gdk::Key::F6 => {
                 sender.input(AppMsg::ToggleHeaderBar);
                 glib::Propagation::Stop

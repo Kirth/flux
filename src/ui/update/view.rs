@@ -47,6 +47,12 @@ pub(super) fn handle(
         AppMsg::SetSingleClick(val) => app.handle_set_single_click(val),
         AppMsg::ToggleSingleClick => app.handle_toggle_single_click(),
         AppMsg::SetScrolledToBottom(at_bottom) => app.scrolled_to_bottom = at_bottom,
+        AppMsg::WindowActive {
+            active,
+            files_focused,
+        } => app.handle_window_active(active, files_focused),
+        AppMsg::FilesFocusLost => app.handle_files_focus_lost(),
+        AppMsg::QuickPreview => app.handle_quick_preview(sender),
 
         AppMsg::SetAutoMimeBodyColor(c) => app.handle_set_auto_mime_body_color(c, sender),
         AppMsg::SetAutoMimeFontColor(c) => app.handle_set_auto_mime_font_color(c, sender),

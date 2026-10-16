@@ -81,6 +81,9 @@ pub(super) fn setup_path_bar(widgets: &FluxAppWidgets) {
                 stack.set_hexpand(false);
                 header.set_title_widget(Some(&stack));
             }
+            // Show/hide the row now, before restoring focus: showing it maps the
+            // breadcrumbs, and that must not happen after the restore.
+            path_bar.set_visible(move_below && header.is_visible());
             if let Some(focus) = focus {
                 match focus.downcast_ref::<gtk::Text>() {
                     // Don't select a search the user is typing.

@@ -208,6 +208,27 @@ impl FluxApp {
         }
     }
 
+    /// Selects the item at `path` in the active view if it isn't selected yet.
+    fn select_clicked_item(&self, path: &std::path::Path) {
+        let Some(tab) = self.tabs.get(self.active_tab_index) else {
+            return;
+        };
+        let files = &tab.files;
+        let selection = &files.selection_model;
+        // Visible positions: the selection model sits on the filtered list.
+        let Some(pos) = (0..selection.n_items()).find(|&i| {
+            files
+                .get_visible(i)
+                .is_some_and(|w| w.borrow().path.as_path() == path)
+        }) else {
+            return;
+        };
+        if !selection.is_selected(pos) {
+            selection.select_item(pos, true);
+        }
+        files.view.grab_focus();
+    }
+
     /// Resolves target selection coordinates and triggers background MIME calculation for the context menu.
     pub fn handle_prepare_context_menu(
         &self,
@@ -216,6 +237,11 @@ impl FluxApp {
         path: Option<PathBuf>,
         sender: &AsyncComponentSender<Self>,
     ) {
+        // Right-clicking an item selects it (and focuses the view), unless it's already
+        // part of the selection: then the menu acts on the whole selection, as usual.
+        if let Some(clicked) = &path {
+            self.select_clicked_item(clicked);
+        }
         let resolved_path = path.or_else(|| self.get_selected_path());
 
         let sender_ctx = sender.clone();

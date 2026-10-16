@@ -1,6 +1,8 @@
 use crate::model::{AppMsg, FluxApp, SortBy};
 use crate::ui::constants;
 use crate::utils;
+use gtk::glib;
+use gtk::prelude::*;
 use relm4::prelude::*;
 
 impl FluxApp {
@@ -201,16 +203,72 @@ impl FluxApp {
             return;
         }
 
-        let active_files = &mut self.tabs[self.active_tab_index].files;
-        for i in 0..active_files.len() {
-            if let Some(item_wrapper) = active_files.get(i) {
-                if item_wrapper.borrow().is_list_mode == list {
-                    let mut item = item_wrapper.borrow().clone();
+        let files = &mut self.tabs[self.active_tab_index].files;
+        let view = files.view.clone();
+        let selection = files.selection_model.clone();
+        let saved = selection.selection();
+
+        // Keep the same part of the folder on screen once the tiles change size.
+        let vadj = view.vadjustment();
+        let fraction = vadj.as_ref().map(|a| {
+            let range = a.upper() - a.page_size();
+            if range > 0.0 {
+                a.value() / range
+            } else {
+                0.0
+            }
+        });
+
+        let items: Vec<glib::BoxedAnyObject> = (0..files.len())
+            .filter_map(|i| files.get(i))
+            .map(|wrapper| {
+                let mut item = wrapper.borrow().clone();
+                if item.is_list_mode == list {
                     item.icon_size = size;
-                    active_files.remove(i);
-                    active_files.insert(i, item);
+                }
+                glib::BoxedAnyObject::new(item)
+            })
+            .collect();
+        match backing_store(&selection) {
+            // One change for the whole folder: a single re-layout, no per-item churn.
+            Some(store) => store.splice(0, store.n_items(), &items),
+            None => {
+                for (i, obj) in items.into_iter().enumerate() {
+                    let item = obj.borrow::<crate::ui::FileItem>().clone();
+                    files.remove(i as u32);
+                    files.insert(i as u32, item);
                 }
             }
         }
+
+        // Positions are unchanged, so the old selection still applies.
+        let n = selection.n_items();
+        if n > 0 && !saved.is_empty() {
+            selection.set_selection(&saved, &gtk::Bitset::new_range(0, n));
+        }
+        if let (Some(adj), Some(fraction)) = (vadj, fraction) {
+            glib::idle_add_local_once(move || {
+                let range = adj.upper() - adj.page_size();
+                if range > 0.0 {
+                    adj.set_value(fraction * range);
+                }
+            });
+        }
+    }
+}
+
+/// The `gio::ListStore` behind a typed view's selection model (relm4 keeps it private):
+/// the selection wraps the store directly, or a filter/sort model over it.
+fn backing_store(selection: &gtk::MultiSelection) -> Option<gtk::gio::ListStore> {
+    let mut model = selection.model()?;
+    loop {
+        if let Some(store) = model.downcast_ref::<gtk::gio::ListStore>() {
+            return Some(store.clone());
+        }
+        model = if let Some(filter) = model.downcast_ref::<gtk::FilterListModel>() {
+            filter.model()?
+        } else {
+            model.downcast_ref::<gtk::SortListModel>()?.model()?
+        };
     }
 }

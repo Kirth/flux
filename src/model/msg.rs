@@ -108,6 +108,13 @@ pub enum AppMsg {
     AddTagToSidebar(String),
     /// Message triggered when the file grid scroll position reaches or leaves the bottom boundary.
     SetScrolledToBottom(bool),
+    /// The main window became active or inactive; `files_focused`: whether keyboard
+    /// focus was in the file view at that moment.
+    WindowActive { active: bool, files_focused: bool },
+    /// Keyboard focus fell to nothing right after being on the files.
+    FilesFocusLost,
+    /// Space: toggle the flux-preview window for the selected file.
+    QuickPreview,
     /// Initiates a copy or move of selected items directly to a quick list destination.
     PerformQuickTransfer { dest: PathBuf, is_cut: bool },
     /// Overwrites the quick-list entry at the given index with the current directory path.

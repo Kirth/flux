@@ -266,9 +266,20 @@ impl SimpleAsyncComponent for FluxApp {
                                                 }
                                             }
                                         },
+                                        // Back from search / the path entry: focus the last crumb. Only
+                                        // when focus is still in the header: being re-mapped (e.g. moved
+                                        // to the path row) mustn't take focus from anything else.
                                         connect_map => |container| {
-                                            if let Some(last) = container.last_child() {
-                                                last.grab_focus();
+                                            let focus = container.root().and_then(|r| r.focus());
+                                            let in_header = focus.as_ref().is_some_and(|f| {
+                                                container
+                                                    .ancestor(gtk::Stack::static_type())
+                                                    .is_some_and(|stack| f.is_ancestor(&stack))
+                                            });
+                                            if in_header {
+                                                if let Some(last) = container.last_child() {
+                                                    last.grab_focus();
+                                                }
                                             }
                                         },
                                     }
@@ -710,10 +721,21 @@ impl SimpleAsyncComponent for FluxApp {
                                             add_controller = gtk::EventControllerScroll {
                                                 set_flags: gtk::EventControllerScrollFlags::VERTICAL,
                                                 set_propagation_phase: gtk::PropagationPhase::Capture,
-                                                connect_scroll[sender] => move |ctrl, _, dy| {
+                                                connect_scroll[sender, zoom_acc = std::rc::Rc::new(std::cell::Cell::new(0.0f64))] => move |ctrl, _, dy| {
                                                     let modifiers = ctrl.current_event_state();
                                                     if modifiers.contains(gdk::ModifierType::CONTROL_MASK) {
-                                                        sender.input(AppMsg::Zoom(dy));
+                                                        // One size step per wheel notch (±1); a touchpad's small
+                                                        // deltas add up instead of each being a step.
+                                                        let mut acc = zoom_acc.get();
+                                                        if acc * dy < 0.0 {
+                                                            acc = 0.0;
+                                                        }
+                                                        acc += dy;
+                                                        if acc.abs() >= 1.0 {
+                                                            sender.input(AppMsg::Zoom(acc.signum()));
+                                                            acc -= acc.signum();
+                                                        }
+                                                        zoom_acc.set(acc);
                                                         return glib::Propagation::Stop;
                                                     }
                                                     glib::Propagation::Proceed
@@ -1057,6 +1079,8 @@ impl SimpleAsyncComponent for FluxApp {
         Self::store_widget_refs(&mut model, &widgets, &sender);
         Self::setup_input_controllers(&model, &widgets, &root, &sender);
         Self::setup_window(&model, &widgets, &root);
+        // Keeps keyboard focus on the files (see focus.rs).
+        crate::ui::ops::install_focus_tracking(root.upcast_ref(), sender.clone());
         Self::setup_breakpoints(&mut model, &widgets, &root, &sender);
         super::path_bar::setup_path_bar(&widgets);
         Self::schedule_startup_tasks(&model, &sender, open_archive);

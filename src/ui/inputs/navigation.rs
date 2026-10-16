@@ -29,9 +29,18 @@ pub fn setup_history(
 ) {
     let history = gtk::ShortcutController::new();
 
+    // Alt+Left / Alt+Right always work, next to whatever back/forward are set to
+    // (the default config binds back to BackSpace).
+    let with_fixed = |configured: &gtk::ShortcutTrigger, fixed: &str| -> gtk::ShortcutTrigger {
+        match gtk::ShortcutTrigger::parse_string(fixed) {
+            Some(fixed) => gtk::AlternativeTrigger::new(configured.clone(), fixed).upcast(),
+            None => configured.clone(),
+        }
+    };
+
     let sender_back = sender.clone();
     history.add_shortcut(gtk::Shortcut::new(
-        Some(keymap.back.clone()),
+        Some(with_fixed(&keymap.back, "<Alt>Left")),
         Some(gtk::CallbackAction::new(move |_, _| {
             sender_back.input(AppMsg::GoBack);
             glib::Propagation::Stop
@@ -40,7 +49,7 @@ pub fn setup_history(
 
     let sender_forward = sender;
     history.add_shortcut(gtk::Shortcut::new(
-        Some(keymap.forward.clone()),
+        Some(with_fixed(&keymap.forward, "<Alt>Right")),
         Some(gtk::CallbackAction::new(move |_, _| {
             sender_forward.input(AppMsg::GoForward);
             glib::Propagation::Stop

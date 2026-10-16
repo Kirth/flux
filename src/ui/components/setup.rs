@@ -392,6 +392,9 @@ impl FileItem {
 
                     #[name = "label_scroller"]
                     gtk::ScrolledWindow {
+                        // Never a keyboard stop itself (focusing a row would land here and
+                        // break arrow-key navigation); the rename entry inside stays focusable.
+                        set_focusable: false,
                         set_hscrollbar_policy: gtk::PolicyType::Never,
                         set_vscrollbar_policy: gtk::PolicyType::Never,
                         set_propagate_natural_width: true,

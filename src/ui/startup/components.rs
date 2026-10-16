@@ -216,6 +216,7 @@ impl FluxApp {
             pending_thumbnails: std::collections::HashSet::new(),
             folder_cache: std::collections::HashMap::with_capacity(32),
             scrolled_to_bottom: false,
+            files_focused_on_leave: false,
             last_search_was_advanced: false,
             search_hits: Vec::new(),
             search_tree_session: 0,
