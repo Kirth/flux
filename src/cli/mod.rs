@@ -16,6 +16,8 @@ use icons::{reset_icon_on_target, set_icon_on_target};
 pub fn run() {
     crate::i18n::init();
     adw::init().expect("Failed to initialize Libadwaita");
+    // Crash reports (always), hang watchdog with FLUX_DEBUG=1.
+    crate::utils::flight::install();
 
     let args: Vec<String> = std::env::args().collect();
     let home_dir = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));

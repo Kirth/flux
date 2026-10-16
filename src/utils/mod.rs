@@ -7,6 +7,7 @@
 pub mod config;
 pub mod deps;
 pub mod extension_template;
+pub mod flight;
 pub mod glob;
 pub mod helpers;
 pub mod hwga;

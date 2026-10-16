@@ -65,6 +65,8 @@ pkgs.mkShell {
     btrfs-progs
     xfsprogs
     python3
+    gdb # FLUX_DEBUG hang reports: thread stacks
+    elfutils # eu-stack
   ];
 
   RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";

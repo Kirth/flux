@@ -38,6 +38,7 @@
   btrfs-progs,
   xfsprogs,
   python3,
+  elfutils,
 }:
 
 let
@@ -83,6 +84,10 @@ rustPlatform.buildRustPackage {
     gst-plugins-ugly
     gst-libav
   ]);
+
+  # Function names and lines in panic backtraces and FLUX_DEBUG hang stacks.
+  env.CARGO_PROFILE_RELEASE_DEBUG = "line-tables-only";
+  dontStrip = true;
 
   # Several tests depend on the host (mounts, $HOME, real user); run them with
   # `cargo test` in the dev shell instead.
@@ -130,6 +135,7 @@ rustPlatform.buildRustPackage {
         btrfs-progs
         xfsprogs
         python3
+        elfutils # eu-stack: thread stacks in FLUX_DEBUG hang reports
       ]
     })
   '';
