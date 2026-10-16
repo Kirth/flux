@@ -1,10 +1,8 @@
 use crate::model::{AppMsg, FluxApp};
 use crate::utils;
-use crate::utils::search::{parse_size_filter, SizeOp};
+use crate::utils::search::SizeOp;
 use gtk::glib;
 use gtk::prelude::*;
-use nucleo::pattern::{CaseMatching, Normalization, Pattern};
-use nucleo::Utf32Str;
 use relm4::prelude::*;
 use std::sync::atomic::Ordering;
 
@@ -38,83 +36,6 @@ impl FluxApp {
             return;
         }
 
-        // Check for glob pattern (*.iso, etc.) -> Recursive Subfolder Search
-        let has_wildcard = query_lc.contains('*') || query_lc.contains('?');
-        let has_ext_char = query_lc
-            .rfind('.')
-            .map(|dot_idx| {
-                dot_idx + 1 < query_lc.len() && !query_lc[dot_idx + 1..].trim().is_empty()
-            })
-            .unwrap_or(false);
-
-        // Instantly lock into list mode if the user starts typing a wildcard pattern
-        if has_wildcard {
-            if !self.search_saved_layout {
-                self.saved_list_mode = self.is_list_mode;
-                self.saved_max_columns = self.tabs[self.active_tab_index].files.view.max_columns();
-                self.search_saved_layout = true;
-            }
-            self.is_list_mode = true;
-            let active_view = &self.tabs[self.active_tab_index].files.view;
-            active_view.set_min_columns(1);
-            active_view.set_max_columns(1);
-            self.sync_list_mode();
-        }
-
-        // Only kick off the heavy recursive search once there are actual characters following the glob/dot
-        if has_wildcard && (has_ext_char || query_lc.len() > 1) {
-            self.filter = query.clone();
-            let query_target = query_lc.clone();
-
-            // Try fast SQLite index query before falling back to full filesystem walk
-            let clean_query = query_target.replace(['*', '?'], "");
-            let clean_query = clean_query.trim().to_string();
-            let current_dir = self.current_path.clone();
-
-            if crate::services::search::indexer::is_ready() && clean_query.len() >= 3 {
-                crate::services::search::indexer::request_delta_scan();
-
-                if let Ok(index) = crate::services::search::indexer::SearchIndex::open_or_create() {
-                    if let Ok(matches) = index.query_in(&clean_query, Some(&current_dir), 300) {
-                        let mut scoped_matches = Vec::new();
-                        let mut stale_paths = Vec::new();
-
-                        for p in matches {
-                            if p.exists() {
-                                scoped_matches.push(p);
-                            } else {
-                                stale_paths.push(p.to_string_lossy().to_string());
-                            }
-                        }
-
-                        // Prune dead entries in background if any ghost files were hit
-                        if !stale_paths.is_empty() {
-                            crate::services::search::indexer::prune_paths(stale_paths);
-                        }
-
-                        if !scoped_matches.is_empty() {
-                            // Populate results or feed fast-path view
-                        }
-                    }
-                }
-            }
-
-            sender.input(AppMsg::StartAdvancedSearch(
-                crate::services::search::AdvancedSearchParams {
-                    patterns: vec![query_target],
-                    include_hidden: self.show_hidden,
-                    ..Default::default()
-                },
-            ));
-            return;
-        } else if has_wildcard {
-            // Just filter current view or wait while they finish typing the extension (e.g., user typed "*.p")
-            self.filter = query.clone();
-            if let Some(tab) = self.tabs.get_mut(self.active_tab_index) {
-                tab.files.clear_filters();
-            }
-            return;
-        }
         // Check for tag filter (:tag:name, :t:name, #name) -> Global Search
         if let Some((tags, rest_query)) = crate::utils::search::parse_tag_filter(&query_lc) {
             self.filter = query.clone();
@@ -283,49 +204,83 @@ impl FluxApp {
             return;
         }
 
-        // Check for size filter
-        if let Some((size_op, rest_query)) = parse_size_filter(&query_lc) {
+        let q = crate::utils::search::parse_query(&query);
+
+        // Globs (`*.iso`, `.webm`) search the subfolders too: lock into list mode as
+        // soon as one is typed.
+        if q.is_deep() {
+            if !self.search_saved_layout {
+                self.saved_list_mode = self.is_list_mode;
+                self.saved_max_columns = self.tabs[self.active_tab_index].files.view.max_columns();
+                self.search_saved_layout = true;
+            }
+            self.is_list_mode = true;
+            let active_view = &self.tabs[self.active_tab_index].files.view;
+            active_view.set_min_columns(1);
+            active_view.set_max_columns(1);
+            self.sync_list_mode();
+
             self.filter = query.clone();
-            let tab = &mut self.tabs[self.active_tab_index];
-            tab.files.clear_filters();
+            if let Some(tab) = self.tabs.get_mut(self.active_tab_index) {
+                tab.files.clear_filters();
+            }
+            // Wait for something after the wildcard ("*." isn't worth a tree walk yet).
+            let glob_text: String = q.globs.join(" ").replace(['*', '?', '[', ']'], "");
+            if !glob_text.chars().any(|c| c.is_alphanumeric()) {
+                return;
+            }
 
-            let filter_text = rest_query.to_lowercase();
-            let size_op_clone = size_op.clone();
-
-            tab.files.add_filter(move |item| {
-                let name_match =
-                    filter_text.is_empty() || item.name.to_lowercase().contains(&filter_text);
-
-                let size_match = if item.is_dir {
-                    true
-                } else {
-                    match size_op_clone {
-                        SizeOp::Gt(v) => item.size > v,
-                        SizeOp::Lt(v) => item.size < v,
-                        SizeOp::Range(l, r) => item.size >= l && item.size <= r,
+            // Keeps the index fresh and prunes entries for deleted files.
+            let clean_query = glob_text.trim_start_matches('.').trim().to_string();
+            if crate::services::search::indexer::is_ready() && clean_query.len() >= 3 {
+                crate::services::search::indexer::request_delta_scan();
+                if let Ok(index) = crate::services::search::indexer::SearchIndex::open_or_create() {
+                    if let Ok(matches) = index.query_in(&clean_query, Some(&self.current_path), 300)
+                    {
+                        let stale_paths: Vec<String> = matches
+                            .into_iter()
+                            .filter(|p| !p.exists())
+                            .map(|p| p.to_string_lossy().to_string())
+                            .collect();
+                        if !stale_paths.is_empty() {
+                            crate::services::search::indexer::prune_paths(stale_paths);
+                        }
                     }
-                };
-                name_match && size_match
-            });
-
-            let view = self.tabs[self.active_tab_index].files.view.clone();
-            glib::idle_add_local_once(move || {
-                if let Some(model) = view
-                    .model()
-                    .and_then(|m| m.downcast::<gtk::MultiSelection>().ok())
-                {
-                    model.unselect_all();
                 }
+            }
+
+            // The walk filters by size and date itself; a range is walked as "larger
+            // than its low end" and narrowed by the view filter below.
+            let size_bytes = q.size.as_ref().map(|op| match *op {
+                SizeOp::Gt(v) => (true, v),
+                SizeOp::Lt(v) => (false, v),
+                SizeOp::Range(l, r) => (true, l.min(r).saturating_sub(1)),
             });
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs() as i64);
+            let date_seconds = q
+                .modified_after
+                .map(|t| now.saturating_sub(t).max(0) as u64);
+            // Name words and exact ranges are checked per result before it's shown.
+            sender.input(AppMsg::StartAdvancedSearch(
+                crate::services::search::AdvancedSearchParams {
+                    patterns: q.globs.clone(),
+                    size_bytes,
+                    date_seconds,
+                    include_hidden: self.show_hidden,
+                    result_filter: Some(Box::new(q)),
+                    ..Default::default()
+                },
+            ));
             return;
         }
 
-        // Normal filename filtering
+        // Everything else filters the current folder: name terms (fuzzy), size, date.
         self.filter = query.clone();
         let tab = &mut self.tabs[self.active_tab_index];
         tab.files.clear_filters();
         let view = tab.files.view.clone();
-
         glib::idle_add_local_once(move || {
             if let Some(model) = view
                 .model()
@@ -334,23 +289,8 @@ impl FluxApp {
                 model.unselect_all();
             }
         });
-
-        let trimmed = query.trim();
-        if trimmed.is_empty() {
-            return;
+        if !q.is_empty() {
+            tab.files.add_filter(move |item| item.shown_by(&q));
         }
-
-        let parsed_pattern = Pattern::parse(trimmed, CaseMatching::Ignore, Normalization::Smart);
-
-        tab.files.add_filter(move |item| {
-            let mut target_buf = Vec::new();
-            let utf32_target = Utf32Str::new(&item.name, &mut target_buf);
-            parsed_pattern
-                .score(
-                    utf32_target,
-                    &mut nucleo::Matcher::new(nucleo::Config::DEFAULT),
-                )
-                .is_some()
-        });
     }
 }

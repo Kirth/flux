@@ -74,11 +74,13 @@ impl FluxApp {
                     }
                 }
             } else {
+                let query = crate::utils::search::parse_query(&query_lc);
                 let mut match_count = 0;
 
                 for i in 0..active_files.len() {
                     if let Some(wrapper) = active_files.get(i) {
-                        if crate::utils::search::fuzzy_match(&wrapper.borrow().name, &query_lc) {
+                        let item = wrapper.borrow();
+                        if item.shown_by(&query) {
                             if visual_indices.contains(&(match_count as u32)) {
                                 selected_paths.push(wrapper.borrow().path.clone());
                             }
@@ -162,12 +164,13 @@ impl FluxApp {
                     }
                 }
             } else {
+                let query = crate::utils::search::parse_query(&query_lc);
                 let mut match_count = 0u32;
 
                 for i in 0..active_files.len() {
                     if let Some(wrapper) = active_files.get(i) {
                         let item = wrapper.borrow();
-                        if crate::utils::search::fuzzy_match(&item.name, &query_lc) {
+                        if item.shown_by(&query) {
                             if visual_indices.contains(&match_count) {
                                 result.push((item.path.clone(), item.is_dir));
                             }

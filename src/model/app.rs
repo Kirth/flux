@@ -84,6 +84,12 @@ pub struct FluxApp {
     /// True while showing results (or no-results) from the advanced search dialog, cleared on navigate or reset.
     #[allow(dead_code)]
     pub last_search_was_advanced: bool,
+    /// Results of the current recursive search, laid out as a tree on each batch.
+    pub search_hits: Vec<SearchHit>,
+    /// Search session `search_hits` belongs to.
+    pub search_tree_session: u64,
+    /// Query the current recursive search's results must match to be shown.
+    pub search_result_filter: Option<crate::utils::search::SearchQuery>,
     /// Whether the bottom status bar is currently visible.
     pub statusbar_visible: bool,
     /// Tracks whether the file grid scrollable container has reached the bottom boundary.
@@ -246,4 +252,14 @@ pub struct FluxApp {
     /// Prevents `handle_show_transfer_dialog` from opening the transfer
     /// progress window on top of the conflict prompt.
     pub conflict_dialog_active: bool,
+}
+
+/// A recursive search result kept so the result tree can be laid out again.
+#[derive(Debug)]
+pub struct SearchHit {
+    pub hit: crate::services::search::ExtensionMatch,
+    /// Relative to the searched folder.
+    pub rel: std::path::PathBuf,
+    pub is_dir: bool,
+    pub icon: adw::gio::Icon,
 }

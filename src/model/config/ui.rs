@@ -125,6 +125,10 @@ pub struct UIConfig {
     pub default_icon_size: i32,
     /// Default pixel size for icons when the view is in list mode.
     pub list_icon_size: i32,
+    /// Grid icon size set by zooming (Ctrl+scroll, Ctrl +/−), for every folder.
+    /// 0 = not zoomed: `default_icon_size` applies.
+    #[serde(default)]
+    pub grid_icon_size: i32,
     /// Width of the left navigation sidebar in pixels.
     pub sidebar_width: i32,
     /// Whether to display standard XDG user directories like Documents and Downloads.
@@ -241,6 +245,7 @@ impl Default for UIConfig {
             file_icons: HashMap::new(),
             default_icon_size: 0,
             list_icon_size: 24,
+            grid_icon_size: 0,
             sidebar_width: 0,
             show_xdg_dirs: false,
             single_click: false,
@@ -299,6 +304,19 @@ impl Default for UIConfig {
             content_search_max_file_mb: default_content_search_max_file_mb(),
             ui_scale: 1.0,
             diff_editor: default_diff_editor(),
+        }
+    }
+}
+
+impl UIConfig {
+    /// Grid icon size in effect: the zoomed size, else the configured default.
+    pub fn effective_grid_icon_size(&self) -> i32 {
+        if self.grid_icon_size > 0 {
+            self.grid_icon_size
+        } else if self.default_icon_size > 0 {
+            self.default_icon_size
+        } else {
+            96
         }
     }
 }

@@ -59,6 +59,8 @@ impl FluxApp {
 
     pub fn handle_set_icon_size(&mut self, val: i32, sender: &AsyncComponentSender<Self>) {
         self.config.ui.default_icon_size = val;
+        // Setting a size also replaces any zoomed size, so the slider and zoom agree.
+        self.config.ui.grid_icon_size = val;
         self.current_icon_size = val;
         utils::save_config(&self.config);
         sender.input(AppMsg::Refresh);

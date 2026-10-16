@@ -71,6 +71,14 @@ pub fn setup_global_shortcuts(
     bind_trigger!("<Primary><Shift>z", AppMsg::Redo);
     bind_trigger!("<Primary>y", AppMsg::Redo);
     bind_trigger!("<Primary><Shift>t", AppMsg::ToggleTagPanel);
+    // Zoom, like Ctrl+scroll (negative = bigger). `equal` is the unshifted `+` key.
+    bind_trigger!("<Primary>plus", AppMsg::Zoom(-1.0));
+    bind_trigger!("<Primary>equal", AppMsg::Zoom(-1.0));
+    bind_trigger!("<Primary>KP_Add", AppMsg::Zoom(-1.0));
+    bind_trigger!("<Primary>minus", AppMsg::Zoom(1.0));
+    bind_trigger!("<Primary>KP_Subtract", AppMsg::Zoom(1.0));
+    bind_trigger!("<Primary>0", AppMsg::ZoomReset);
+    bind_trigger!("<Primary>KP_0", AppMsg::ZoomReset);
 
     window.add_controller(sc);
 

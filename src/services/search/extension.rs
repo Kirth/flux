@@ -140,6 +140,7 @@ fn start_walk(
     let active_tab = &mut app.tabs[app.active_tab_index];
     active_tab.files.clear();
     app.filter.clear();
+    app.search_result_filter = params.result_filter.as_deref().cloned();
 
     // Force list mode (same UX as content search).
     if !app.search_saved_layout {

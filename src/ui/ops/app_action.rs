@@ -116,45 +116,15 @@ impl FluxApp {
                     }
                     found.map(|f| vec![f]).unwrap_or_default()
                 }
-            } else if let Some((op, rest)) = crate::utils::search::parse_size_filter(&query_lc) {
-                let rest_clean = rest.trim().to_lowercase();
-                let mut match_count = 0u32;
-                let mut found = None;
-
-                for i in 0..active_files.len() {
-                    if let Some(wrapper) = active_files.get(i) {
-                        let item = wrapper.borrow();
-                        let name_ok =
-                            rest_clean.is_empty() || item.name.to_lowercase().contains(&rest_clean);
-                        let size_ok = if item.is_dir {
-                            true
-                        } else {
-                            match op {
-                                crate::utils::search::SizeOp::Gt(v) => item.size > v,
-                                crate::utils::search::SizeOp::Lt(v) => item.size < v,
-                                crate::utils::search::SizeOp::Range(l, r) => {
-                                    item.size >= l && item.size <= r
-                                }
-                            }
-                        };
-
-                        if name_ok && size_ok {
-                            if match_count == pos {
-                                found = Some((item.path.clone(), item.is_dir));
-                                break;
-                            }
-                            match_count += 1;
-                        }
-                    }
-                }
-                found.map(|f| vec![f]).unwrap_or_default()
             } else {
+                // The nth item the search box's filter shows.
+                let query = crate::utils::search::parse_query(&self.filter);
                 let mut match_count = 0u32;
                 let mut found = None;
                 for i in 0..active_files.len() {
                     if let Some(wrapper) = active_files.get(i) {
                         let item = wrapper.borrow();
-                        if crate::utils::search::fuzzy_match(&item.name, &query_lc) {
+                        if item.shown_by(&query) {
                             if match_count == pos {
                                 found = Some((item.path.clone(), item.is_dir));
                                 break;

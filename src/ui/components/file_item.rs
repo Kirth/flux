@@ -74,4 +74,8 @@ pub struct FileItem {
     pub default_icon_size: i32,
     pub show_empty_dir_emblem: bool,
     pub disable_drag_and_drop: bool,
+    /// Tree depth of a recursive search result (list mode indents by it).
+    pub indent: u32,
+    /// A folder row added only to hold recursive search results under it.
+    pub search_group: bool,
 }

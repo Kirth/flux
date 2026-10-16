@@ -26,7 +26,8 @@ pub fn parse_size_filter(query: &str) -> Option<(SizeOp, String)> {
     None
 }
 
-fn parse_size_op(s: &str) -> Option<SizeOp> {
+/// One size token: `>50mb`, `<1g`, `10mb..1gb`.
+pub(super) fn parse_size_op(s: &str) -> Option<SizeOp> {
     if let Some((left, right)) = s.split_once("..") {
         let l = parse_size(left)?;
         let r = parse_size(right)?;
@@ -58,14 +59,11 @@ fn parse_size(s: &str) -> Option<u64> {
     }
 
     let (num_part, unit_part) = s.split_at(num_end);
-
-    // Reject fractional byte counts: `>1.5MB` is ambiguous and the test
-    // suite requires `None` for it. Only whole numbers are accepted.
-    if num_part.contains('.') {
+    // Whole or decimal (`1.5gb`); rounded to bytes below.
+    let n: f64 = num_part.parse().ok()?;
+    if !n.is_finite() || n < 0.0 {
         return None;
     }
-
-    let n: u64 = num_part.parse().ok()?;
 
     let unit_clean = unit_part.trim().to_lowercase();
     let unit = unit_clean
@@ -88,5 +86,6 @@ fn parse_size(s: &str) -> Option<u64> {
         _ => return None,
     };
 
-    n.checked_mul(multiplier)
+    let bytes = (n * multiplier as f64).round();
+    (bytes < u64::MAX as f64).then_some(bytes as u64)
 }

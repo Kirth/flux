@@ -6,6 +6,12 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 impl FileItem {
+    /// Whether the search box's filter shows this item: it matches the query, or it's
+    /// a folder row holding recursive search results.
+    pub fn shown_by(&self, query: &crate::utils::search::SearchQuery) -> bool {
+        self.search_group || query.matches(&self.name, self.is_dir, self.size, self.mtime)
+    }
+
     pub fn builder(name: String, path: PathBuf, icon: adw::gio::Icon) -> FileItemBuilder {
         FileItemBuilder {
             display_label: name.clone(),
@@ -41,6 +47,8 @@ impl FileItem {
             show_empty_dir_emblem: false,
             disable_drag_and_drop: false,
             show_folder_stats: false,
+            indent: 0,
+            search_group: false,
         }
     }
 }
@@ -80,6 +88,8 @@ pub struct FileItemBuilder {
     default_icon_size: i32,
     show_empty_dir_emblem: bool,
     disable_drag_and_drop: bool,
+    indent: u32,
+    search_group: bool,
 }
 
 #[allow(dead_code, clippy::wrong_self_convention)]
@@ -227,6 +237,13 @@ impl FileItemBuilder {
         self
     }
 
+    /// Places the item in a recursive search result tree.
+    pub fn search_tree(mut self, indent: u32, search_group: bool) -> Self {
+        self.indent = indent;
+        self.search_group = search_group;
+        self
+    }
+
     pub fn build(self) -> FileItem {
         FileItem {
             name: self.name,
@@ -266,6 +283,8 @@ impl FileItemBuilder {
             default_icon_size: self.default_icon_size,
             show_empty_dir_emblem: self.show_empty_dir_emblem,
             disable_drag_and_drop: self.disable_drag_and_drop,
+            indent: self.indent,
+            search_group: self.search_group,
         }
     }
 }

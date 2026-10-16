@@ -7,7 +7,7 @@ mod file_load;
 mod msg;
 mod types;
 
-pub use app::FluxApp;
+pub use app::{FluxApp, SearchHit};
 #[allow(unused_imports)]
 pub use config::ContextAction;
 pub use config::{

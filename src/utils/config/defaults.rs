@@ -202,6 +202,7 @@ path = "search://"
                     show_empty_dir_emblem: false,
                     default_icon_size: 128,
                     list_icon_size: 24,
+                    grid_icon_size: 0,
                     startup_window_width: crate::ui::constants::DEFAULT_WIDTH,
                     startup_window_height: crate::ui::constants::DEFAULT_HEIGHT,
                     single_click: false,

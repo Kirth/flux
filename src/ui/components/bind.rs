@@ -14,6 +14,9 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 
+/// Indent per level of recursive search results in list mode.
+const SEARCH_INDENT_PX: i32 = 24;
+
 /// Formats a byte count into a human-readable string (B / KB / MB / GB).
 fn format_size(bytes: u64) -> String {
     const KB: u64 = 1_024;
@@ -232,6 +235,8 @@ impl FileItem {
         for (col, cell) in ListColumn::ALL.iter().zip(&widgets.column_labels) {
             let mut tooltip = None;
             let text = match col {
+                // Folder rows in recursive search results: their item count isn't known.
+                ListColumn::Size if self.search_group => String::new(),
                 ListColumn::Size if self.is_dir => {
                     if self.size == 1 {
                         tr("1 item")
@@ -278,6 +283,11 @@ impl FileItem {
     pub(super) fn bind_widgets(&mut self, widgets: &mut FileWidgets, root: &mut gtk::Overlay) {
         crate::hit!("bind");
         widgets.label.set_label(&self.display_label);
+        if self.search_group {
+            widgets.label.add_css_class("flux-search-group");
+        } else {
+            widgets.label.remove_css_class("flux-search-group");
+        }
 
         apply_clipboard_classes(
             root.upcast_ref(),
@@ -318,6 +328,10 @@ impl FileItem {
             widgets.preview_stack.set_halign(gtk::Align::Start);
             widgets.icon_overlay.set_valign(gtk::Align::Center);
             widgets.icon_overlay.set_halign(gtk::Align::Start);
+            // Recursive search results sit under their folder, one step per level.
+            widgets
+                .icon_overlay
+                .set_margin_start(self.indent as i32 * SEARCH_INDENT_PX);
             widgets.preview_stack.set_visible_child_name("icon");
             widgets.label.set_halign(gtk::Align::Start);
             widgets.label.set_hexpand(true);
@@ -430,6 +444,7 @@ impl FileItem {
             widgets.preview_stack.set_halign(gtk::Align::Center);
             widgets.icon_overlay.set_valign(gtk::Align::End);
             widgets.icon_overlay.set_halign(gtk::Align::Center);
+            widgets.icon_overlay.set_margin_start(0);
             widgets.preview_stack.set_visible_child_name("icon");
             widgets.label.set_halign(gtk::Align::Center);
             widgets.label.set_hexpand(false);

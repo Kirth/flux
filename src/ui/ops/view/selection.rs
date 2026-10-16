@@ -90,12 +90,13 @@ impl FluxApp {
                 out
             } else {
                 // Normal fuzzy / size / extension filter.
+                let query = crate::utils::search::parse_query(&query_lc);
                 let mut match_count = 0u32;
                 let mut out = Vec::new();
                 for i in 0..active_files.len() {
                     if let Some(wrapper) = active_files.get(i) {
                         let item = wrapper.borrow();
-                        if crate::utils::search::fuzzy_match(&item.name, &query_lc) {
+                        if item.shown_by(&query) {
                             if visual_indices.contains(&match_count) {
                                 out.push(item.clone());
                             }

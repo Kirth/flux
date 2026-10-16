@@ -5,10 +5,12 @@ mod extension;
 mod forbidden;
 pub mod indexer;
 mod scan;
+mod tree;
 mod types;
 
 pub use content::start_content_search;
 pub use extension::{start_advanced_search, start_extension_search};
+pub use tree::{build_tree, TreeEntry};
 pub use types::{AdvancedSearchParams, ExtensionMatch};
 
 // Part of the previous public API of `content_scan`, not referenced outside the module yet.

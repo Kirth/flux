@@ -37,6 +37,15 @@ pub fn glob_match(pattern: &str, name: &str) -> bool {
     dp[pl][nl]
 }
 
+/// A pattern-filter word to a filename glob: a bare word is an extension
+/// (`png`, `.png` → `*.png`); globs and MIME shorthands (`image/*`) are kept.
+pub fn normalize_filter_pattern(pattern: &str) -> String {
+    if pattern.contains(['*', '?', '[', '/']) {
+        return pattern.to_string();
+    }
+    format!("*.{}", pattern.trim_start_matches('.'))
+}
+
 /// Compiles a list of glob patterns into a precomputed matcher.
 ///
 /// Use this instead of `glob_match` for filtering many files against the

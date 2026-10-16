@@ -1390,6 +1390,12 @@ row:selected {
   color: @theme_fg_color;
 }
 
+/* folders that only hold recursive search results */
+.flux-search-group {
+  opacity: 0.7;
+  font-size: 0.9em;
+}
+
 /* compact key/value rows in the Properties window */
 .flux-prop-row {
   min-height: 0;

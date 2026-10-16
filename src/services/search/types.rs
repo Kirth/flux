@@ -29,4 +29,7 @@ pub struct AdvancedSearchParams {
     pub only_folders: bool,
     /// Maximum matches allowed during the search walk before stopping.
     pub max_results: usize,
+    /// The search box query: results it doesn't match (name words, size ranges) are
+    /// dropped before they're shown, along with the folder rows they'd need.
+    pub result_filter: Option<Box<crate::utils::search::SearchQuery>>,
 }

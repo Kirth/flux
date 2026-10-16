@@ -30,6 +30,7 @@ pub(super) fn handle(
         AppMsg::SetMaxWidthChars(val) => app.handle_set_max_width_chars(val, sender),
         AppMsg::SetExpandLabels(val) => app.handle_set_expand_labels(val, sender),
         AppMsg::Zoom(delta) => app.handle_zoom(delta),
+        AppMsg::ZoomReset => app.handle_zoom_reset(),
         AppMsg::SwitchHeader(view_name) => app.handle_switch_header(view_name),
 
         AppMsg::SetIconSize(val) => app.handle_set_icon_size(val, sender),

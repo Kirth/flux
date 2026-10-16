@@ -398,7 +398,7 @@ impl SimpleAsyncComponent for FluxApp {
                                         set_halign: gtk::Align::Center,
                                         set_width_chars: constants::HEADER_ENTRY_MIN_CHARS,
                                         set_max_width_chars: constants::HEADER_ENTRY_MAX_CHARS,
-                                        set_placeholder_text: Some(&tr("Patterns: *.py, image/*, audio/*")),
+                                        set_placeholder_text: Some(&tr("Patterns: png, *.rs, image/*")),
                                         set_secondary_icon_name: Some("edit-clear-symbolic"),
                                         set_secondary_icon_tooltip_text: Some(&tr("Clear filter")),
 
@@ -422,8 +422,7 @@ impl SimpleAsyncComponent for FluxApp {
                                                 sender.input(AppMsg::ClearExtensionFilter);
                                                 sender.input(AppMsg::SwitchHeader(constants::VIEW_PATH.to_string()));
                                             } else {
-                                                // Recursive search: walk the current directory tree and
-                                                // present every file whose name matches the glob pattern(s).
+                                                // Filters the current folder's listing (subfolders stay visible).
                                                 sender.input(AppMsg::SetExtensionFilter(patterns));
                                                 sender.input(AppMsg::SwitchHeader(constants::VIEW_PATH.to_string()));
                                             }

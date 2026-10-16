@@ -1,5 +1,5 @@
 use flux::utils::search::{
-    parse_content_search_query, parse_size_filter, parse_tag_filter, SizeOp,
+    parse_content_search_query, parse_query, parse_size_filter, parse_tag_filter, SizeOp,
 };
 
 #[test]
@@ -102,8 +102,11 @@ fn test_parse_size_filter_whitespace_boundaries() {
 }
 
 #[test]
-fn test_parse_size_filter_decimal_bytes_rejected() {
-    assert!(parse_size_filter(">1.5MB").is_none());
+fn test_parse_size_filter_decimals_round_to_bytes() {
+    let (op, _) = parse_size_filter(">1.5MB").unwrap();
+    assert_eq!(op, SizeOp::Gt(1024 * 1024 + 512 * 1024));
+    let (op, _) = parse_size_filter("<0.5k").unwrap();
+    assert_eq!(op, SizeOp::Lt(512));
 }
 
 #[test]
@@ -266,4 +269,80 @@ fn parse_size_filter_tb_lowercase() {
 #[test]
 fn parse_size_filter_naive_range_rejected() {
     assert!(parse_size_filter("10MB-50MB").is_none());
+}
+
+const MB: u64 = 1024 * 1024;
+
+#[test]
+fn query_name_and_size() {
+    let q = parse_query("webm <1MB");
+    assert_eq!(q.terms, vec!["webm"]);
+    assert_eq!(q.size, Some(SizeOp::Lt(MB)));
+    assert!(!q.is_deep());
+    assert!(q.matches("clip.webm", false, 1000, 0));
+    assert!(!q.matches("clip.webm", false, 2 * MB, 0));
+    assert!(!q.matches("clip.mp4", false, 1000, 0));
+}
+
+#[test]
+fn query_size_with_spaces() {
+    assert_eq!(parse_query("> 50MB").size, Some(SizeOp::Gt(50 * MB)));
+    assert_eq!(parse_query(">50 MB").size, Some(SizeOp::Gt(50 * MB)));
+    assert_eq!(parse_query("< 2 gb").size, Some(SizeOp::Lt(2 * 1024 * MB)));
+    assert_eq!(parse_query(">= 1mb").size, Some(SizeOp::Gt(MB)));
+    assert!(parse_query("> 50MB").terms.is_empty());
+}
+
+#[test]
+fn query_size_only_keeps_folders() {
+    let q = parse_query(">1MB");
+    assert!(q.terms.is_empty());
+    assert!(q.matches("Videos", true, 0, 0));
+    assert!(q.matches("big.iso", false, 2 * MB, 0));
+    assert!(!q.matches("small.txt", false, 10, 0));
+}
+
+#[test]
+fn query_glob_is_deep_and_keeps_size() {
+    let q = parse_query("*webm > 50MB");
+    assert_eq!(q.globs, vec!["*webm"]);
+    assert_eq!(q.size, Some(SizeOp::Gt(50 * MB)));
+    assert!(q.is_deep());
+    assert!(q.matches("Movie.WEBM", false, 60 * MB, 0));
+    assert!(!q.matches("movie.webm", false, MB, 0));
+}
+
+#[test]
+fn query_dot_extension_is_a_glob() {
+    let q = parse_query(".webm");
+    assert_eq!(q.globs, vec!["*.webm"]);
+    assert!(q.matches("a.webm", false, 0, 0));
+    assert!(!q.matches("a.mp4", false, 0, 0));
+    // A dotted name isn't an extension.
+    assert_eq!(parse_query(".config.toml").terms, vec![".config.toml"]);
+}
+
+#[test]
+fn query_panel_tokens() {
+    let q = parse_query("size:>1048576 >date:1700000000");
+    assert_eq!(q.size, Some(SizeOp::Gt(MB)));
+    assert_eq!(q.modified_after, Some(1_700_000_000));
+    assert!(q.matches("new.bin", false, 2 * MB, 1_800_000_000));
+    assert!(!q.matches("old.bin", false, 2 * MB, 1_600_000_000));
+}
+
+#[test]
+fn query_bare_numbers_are_names() {
+    let q = parse_query(">10");
+    assert!(q.size.is_none());
+    assert_eq!(q.terms, vec![">10"]);
+    assert!(parse_query("").is_empty());
+    assert!(parse_query("   ").is_empty());
+}
+
+#[test]
+fn query_fuzzy_terms() {
+    let q = parse_query("tlgr dsk");
+    assert!(q.matches("Telegram Desktop", true, 0, 0));
+    assert!(!q.matches("Downloads", true, 0, 0));
 }

@@ -1,4 +1,4 @@
-use nucleo::pattern::{CaseMatching, Normalization, Pattern};
+use nucleo::pattern::Pattern;
 use nucleo::{Config, Matcher, Utf32Str};
 use std::cell::RefCell;
 
@@ -18,18 +18,4 @@ pub fn fuzzy_match_compiled(target: &str, pattern: &Pattern) -> bool {
         let utf32_target = Utf32Str::new(target, buf);
         pattern.score(utf32_target, matcher).is_some()
     })
-}
-
-/// High-performance fuzzy path matcher using Nucleo.
-#[inline]
-pub fn fuzzy_match(target: &str, pattern: &str) -> bool {
-    let pattern_trimmed = pattern.trim();
-    if pattern_trimmed.is_empty() {
-        return true;
-    }
-
-    let parsed_pattern =
-        Pattern::parse(pattern_trimmed, CaseMatching::Ignore, Normalization::Smart);
-
-    fuzzy_match_compiled(target, &parsed_pattern)
 }

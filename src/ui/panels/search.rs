@@ -469,6 +469,7 @@ pub fn build_search_panel(initial_width: i32, sender: AsyncComponentSender<FluxA
                     include_hidden,
                     only_folders,
                     max_results: 0,
+                    result_filter: None,
                 }));
                 return;
             }

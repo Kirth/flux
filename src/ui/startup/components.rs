@@ -93,10 +93,7 @@ impl FluxApp {
         let state_db = Arc::new(pending_db.wait().await);
 
         // Model Assembly
-        let initial_icon_size = dirs::home_dir()
-            .and_then(|home| state_db.get_view(&home).ok().flatten())
-            .map(|(_, _, size, _)| size as i32)
-            .unwrap_or(config.ui.default_icon_size);
+        let initial_icon_size = config.ui.effective_grid_icon_size();
 
         let effective_sidebar_visible = if no_sidebar {
             false
@@ -220,6 +217,9 @@ impl FluxApp {
             folder_cache: std::collections::HashMap::with_capacity(32),
             scrolled_to_bottom: false,
             last_search_was_advanced: false,
+            search_hits: Vec::new(),
+            search_tree_session: 0,
+            search_result_filter: None,
             active_item_line: 0,
             thumbnail_manager: Arc::new(
                 crate::services::thumbnails::ThumbnailTaskManager::default(),

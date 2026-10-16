@@ -171,46 +171,117 @@ impl FluxApp {
     }
 
     /// Appends a batch of extension/glob search results to the grid.
+    /// Adds recursive search results, shown as a tree: each match under the folders
+    /// it's in (relative to the searched folder), indented by depth. The tree is laid
+    /// out again on every batch, since a merged folder chain can split when a later
+    /// result lands beside it.
     pub fn handle_extension_search_batch(
         &mut self,
         results: Vec<crate::services::search::ExtensionMatch>,
         session: u64,
     ) {
+        use crate::services::search::{build_tree, TreeEntry};
+
         if self.load_id.load(Ordering::SeqCst) != session {
             return;
         }
+        if self.search_tree_session != session {
+            self.search_tree_session = session;
+            self.search_hits.clear();
+        }
 
-        let active_files = &mut self.tabs[self.active_tab_index].files;
-        let start_idx = active_files.len();
+        let root = self.current_path.clone();
+        let file_name = |p: &Path| {
+            p.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| p.to_string_lossy().into_owned())
+        };
+        for hit in results {
+            let is_dir = hit.path.is_dir();
+            // Checked before it's shown, so no folder row ends up empty.
+            if let Some(q) = &self.search_result_filter {
+                if !q.matches(&file_name(&hit.path), is_dir, hit.size, hit.mtime) {
+                    continue;
+                }
+            }
+            let rel = hit
+                .path
+                .strip_prefix(&root)
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|_| PathBuf::from(&hit.display));
+            let icon = utils::icon::get_icon_for_path(&hit.path, is_dir);
+            self.search_hits.push(crate::model::SearchHit {
+                rel,
+                is_dir,
+                icon,
+                hit,
+            });
+        }
+
+        let entries: Vec<TreeEntry> = self
+            .search_hits
+            .iter()
+            .map(|h| TreeEntry {
+                rel: h.rel.clone(),
+                is_dir: h.is_dir,
+            })
+            .collect();
         let list_icon_size = self.current_list_icon_size;
         let max_width_chars = self.config.ui.max_width_chars;
         let grid_spacing = self.config.ui.grid_spacing;
         let show_symlink_emblem = self.config.ui.show_symlink_emblem;
 
-        for (offset, item) in results.into_iter().enumerate() {
-            let is_dir = item.path.is_dir();
-            let icon = utils::icon::get_icon_for_path(&item.path, is_dir);
-            let size = item.size;
-            let mtime = item.mtime;
-
-            let is_symlink = item.path.is_symlink();
-            let is_broken_symlink = is_symlink && !item.path.exists();
-
-            self.tabs[self.active_tab_index].files.append(
-                crate::ui::FileItem::builder(item.display, item.path, icon)
-                    .icon_size(list_icon_size)
+        let items: Vec<crate::ui::FileItem> = build_tree(&entries)
+            .into_iter()
+            .enumerate()
+            .map(|(i, row)| {
+                let (path, is_dir, size, mtime, icon, icon_size) = match row.result {
+                    Some(idx) => {
+                        let h = &self.search_hits[idx];
+                        let path = h.hit.path.clone();
+                        (
+                            path,
+                            h.is_dir,
+                            h.hit.size,
+                            h.hit.mtime,
+                            h.icon.clone(),
+                            list_icon_size,
+                        )
+                    }
+                    None => {
+                        let path = root.join(&row.rel);
+                        let mtime = path
+                            .symlink_metadata()
+                            .ok()
+                            .and_then(|m| m.modified().ok())
+                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                            .map_or(0, |d| d.as_secs() as i64);
+                        let icon = utils::icon::get_icon_for_path(&path, true);
+                        // Folders only holding matches stay small, so the matches stand out.
+                        (path, true, 0, mtime, icon, (list_icon_size / 2).max(16))
+                    }
+                };
+                let is_symlink = path.is_symlink();
+                let is_broken_symlink = is_symlink && !path.exists();
+                crate::ui::FileItem::builder(row.label, path, icon)
+                    .icon_size(icon_size)
                     .size(size)
                     .mtime(mtime)
                     .is_dir(is_dir)
                     .is_list_mode(true)
-                    .grid_idx(start_idx + offset as u32)
+                    .grid_idx(i as u32)
                     .max_width_chars(max_width_chars)
                     .grid_spacing(grid_spacing)
                     .is_symlink(is_symlink)
                     .is_broken_symlink(is_broken_symlink)
                     .show_symlink_emblem(show_symlink_emblem)
-                    .build(),
-            );
-        }
+                    .search_tree(row.depth, row.result.is_none())
+                    .build()
+            })
+            .collect();
+
+        let files = &mut self.tabs[self.active_tab_index].files;
+        files.clear();
+        files.extend_from_iter(items);
     }
 }

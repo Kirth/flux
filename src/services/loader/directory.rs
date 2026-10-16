@@ -90,7 +90,8 @@ impl FluxApp {
             .copied()
             .unwrap_or(self.config.ui.folders_first);
 
-        if let Ok(Some((sort, rev, size, ff))) = self.state_db.get_view(&path) {
+        // The stored size is unused: the grid size is global (zoom applies everywhere).
+        if let Ok(Some((sort, rev, _size, ff))) = self.state_db.get_view(&path) {
             self.sort_by = match sort.as_str() {
                 "Date" => SortBy::Date,
                 "Size" => SortBy::Size,
@@ -98,7 +99,7 @@ impl FluxApp {
                 _ => SortBy::Name,
             };
             self.sort_ascending = !rev;
-            self.current_icon_size = size as i32;
+            self.current_icon_size = self.config.ui.effective_grid_icon_size();
 
             // If current_folders_first has an explicit override, prioritize it,
             // otherwise use the state_db value.
@@ -108,7 +109,7 @@ impl FluxApp {
         } else {
             self.sort_by = self.config.ui.default_sort;
             self.sort_ascending = true;
-            self.current_icon_size = self.config.ui.default_icon_size;
+            self.current_icon_size = self.config.ui.effective_grid_icon_size();
         }
 
         // ── Folder monitor ────────────────────────────────────────────────────────
@@ -465,9 +466,13 @@ impl FluxApp {
                     })
                     .collect()
             });
-            if !filter.is_empty() {
-                let query = filter.to_lowercase();
-                items.retain(|item| crate::utils::search::fuzzy_match(&item.sort_name, &query));
+            // Same matching as the search box's view filter: matching the raw text
+            // would treat `>1mb` as part of a name and drop everything on a reload.
+            let query = crate::utils::search::parse_query(&filter);
+            if !query.is_empty() {
+                items.retain(|item| {
+                    query.matches(&item.sort_name, item.is_dir, item.size(), item.mtime())
+                });
             }
 
             // Sort - run inside the capped pool so no new threads are spawned

@@ -2,7 +2,6 @@ use crate::model::{AppMsg, FluxApp};
 use relm4::prelude::*;
 
 impl FluxApp {
-    #[allow(dead_code)]
     pub fn handle_set_extension_filter(
         &mut self,
         patterns: Vec<String>,
@@ -10,7 +9,8 @@ impl FluxApp {
     ) {
         let expanded: Vec<String> = patterns
             .iter()
-            .flat_map(|p| crate::utils::glob::expand_mime_category(p))
+            .map(|p| crate::utils::glob::normalize_filter_pattern(p))
+            .flat_map(|p| crate::utils::glob::expand_mime_category(&p))
             .collect();
         self.extension_filter = if expanded.is_empty() {
             None
@@ -21,7 +21,6 @@ impl FluxApp {
         sender.input(AppMsg::Refresh);
     }
 
-    #[allow(dead_code)]
     pub fn handle_clear_extension_filter(&mut self, sender: &AsyncComponentSender<Self>) {
         self.extension_filter = None;
         self.extension_globset = None;

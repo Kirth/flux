@@ -225,3 +225,13 @@ fn expand_mime_category_doc_includes_pdf() {
     use flux::utils::glob::expand_mime_category;
     assert!(expand_mime_category("doc/*").contains(&"*.pdf".to_string()));
 }
+
+#[test]
+fn normalize_filter_pattern_bare_words_are_extensions() {
+    use flux::utils::glob::normalize_filter_pattern;
+    assert_eq!(normalize_filter_pattern("png"), "*.png");
+    assert_eq!(normalize_filter_pattern(".png"), "*.png");
+    assert_eq!(normalize_filter_pattern("*.rs"), "*.rs");
+    assert_eq!(normalize_filter_pattern("image/*"), "image/*");
+    assert_eq!(normalize_filter_pattern("report-?.pdf"), "report-?.pdf");
+}

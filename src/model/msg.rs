@@ -715,6 +715,8 @@ pub enum AppMsg {
     ExecuteCommand(String),
     /// Adjust the icon size based on scroll delta.
     Zoom(f64),
+    /// Back to the configured icon size for the active view mode (Ctrl 0).
+    ZoomReset,
     /// Move back in history.
     GoBack,
     /// Move forward in history.

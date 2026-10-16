@@ -134,89 +134,81 @@ impl FluxApp {
         self.load_path(path, sender);
     }
 
-    /// Adjusts icon scale on scroll, targeting only the active view mode.
+    /// Adjusts icon scale (Ctrl+scroll, Ctrl +/−), targeting only the active view mode.
     ///
-    /// In grid mode the persistent `current_icon_size` and `config.ui.default_icon_size`
-    /// are updated. In list mode `current_list_icon_size` and `config.ui.list_icon_size`
-    /// are updated instead. Only items matching the current mode have their `icon_size`
-    /// field mutated, so switching modes always restores the independent size.
+    /// Grid mode updates `current_icon_size` and `config.ui.grid_icon_size` (one size for
+    /// every folder); list mode updates `current_list_icon_size` and
+    /// `config.ui.list_icon_size`. Only items of the current mode change, so switching
+    /// modes always restores the independent size.
     pub fn handle_zoom(&mut self, delta: f64) {
         crate::hit!("handle_zoom");
         if delta == 0.0 {
             return;
         }
-
-        let direction = if delta > 0.0 { -1 } else { 1 };
-
-        if self.is_list_mode {
-            let current_size = self.current_list_icon_size;
-            let current_idx = constants::CRISP_ICON_SIZES
-                .iter()
-                .position(|&s| s >= current_size)
-                .unwrap_or(constants::CRISP_ICON_SIZES.len() - 1);
-
-            let new_idx = if direction > 0 {
-                (current_idx + 1).min(constants::CRISP_ICON_SIZES.len() - 1)
-            } else {
-                current_idx.saturating_sub(1)
-            };
-
-            let new_size = constants::CRISP_ICON_SIZES[new_idx];
-            if new_size == self.current_list_icon_size {
-                return;
-            }
-
-            self.current_list_icon_size = new_size;
-            self.config.ui.list_icon_size = new_size;
-            utils::save_config(&self.config);
-
-            let active_files = &mut self.tabs[self.active_tab_index].files;
-            for i in 0..active_files.len() {
-                if let Some(item_wrapper) = active_files.get(i) {
-                    if item_wrapper.borrow().is_list_mode {
-                        let mut item = item_wrapper.borrow().clone();
-                        item.icon_size = new_size;
-                        active_files.remove(i);
-                        active_files.insert(i, item);
-                    }
-                }
-            }
+        let sizes = constants::CRISP_ICON_SIZES;
+        let current = if self.is_list_mode {
+            self.current_list_icon_size
+        } else if self.current_icon_size > 0 {
+            self.current_icon_size
         } else {
-            let current_size = self.current_icon_size;
-            let current_idx = constants::CRISP_ICON_SIZES
-                .iter()
-                .position(|&s| s >= current_size)
-                .unwrap_or(constants::CRISP_ICON_SIZES.len() - 1);
+            self.config.ui.effective_grid_icon_size()
+        };
+        let current_idx = sizes
+            .iter()
+            .position(|&s| s >= current)
+            .unwrap_or(sizes.len() - 1);
+        // Scrolling down (positive delta) shrinks.
+        let new_idx = if delta < 0.0 {
+            (current_idx + 1).min(sizes.len() - 1)
+        } else {
+            current_idx.saturating_sub(1)
+        };
+        self.set_icon_size(sizes[new_idx]);
+    }
 
-            let new_idx = if direction > 0 {
-                (current_idx + 1).min(constants::CRISP_ICON_SIZES.len() - 1)
-            } else {
-                current_idx.saturating_sub(1)
-            };
+    /// Ctrl 0: back to the configured size for the active view mode.
+    pub fn handle_zoom_reset(&mut self) {
+        if self.is_list_mode {
+            self.set_icon_size(crate::model::UIConfig::default().list_icon_size);
+        } else {
+            self.config.ui.grid_icon_size = 0;
+            self.set_icon_size(self.config.ui.effective_grid_icon_size());
+        }
+    }
 
-            let new_size = constants::CRISP_ICON_SIZES[new_idx];
-            if new_size == self.current_icon_size {
-                return;
+    /// Applies and saves `size` for the active view mode, refreshing its items.
+    fn set_icon_size(&mut self, size: i32) {
+        let list = self.is_list_mode;
+        let current = if list {
+            self.current_list_icon_size
+        } else {
+            self.current_icon_size
+        };
+        if list {
+            self.current_list_icon_size = size;
+            self.config.ui.list_icon_size = size;
+        } else {
+            self.current_icon_size = size;
+            // Kept at 0 after a reset to the default, so a changed default applies.
+            if self.config.ui.grid_icon_size != 0
+                || size != self.config.ui.effective_grid_icon_size()
+            {
+                self.config.ui.grid_icon_size = size;
             }
+        }
+        utils::save_config(&self.config);
+        if size == current {
+            return;
+        }
 
-            self.current_icon_size = new_size;
-            let _ = self.state_db.save_view(
-                &self.current_path,
-                &format!("{:?}", self.sort_by),
-                false,
-                new_size as u32,
-                self.config.ui.folders_first,
-            );
-
-            let active_files = &mut self.tabs[self.active_tab_index].files;
-            for i in 0..active_files.len() {
-                if let Some(item_wrapper) = active_files.get(i) {
-                    if !item_wrapper.borrow().is_list_mode {
-                        let mut item = item_wrapper.borrow().clone();
-                        item.icon_size = new_size;
-                        active_files.remove(i);
-                        active_files.insert(i, item);
-                    }
+        let active_files = &mut self.tabs[self.active_tab_index].files;
+        for i in 0..active_files.len() {
+            if let Some(item_wrapper) = active_files.get(i) {
+                if item_wrapper.borrow().is_list_mode == list {
+                    let mut item = item_wrapper.borrow().clone();
+                    item.icon_size = size;
+                    active_files.remove(i);
+                    active_files.insert(i, item);
                 }
             }
         }
