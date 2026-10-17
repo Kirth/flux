@@ -14,7 +14,7 @@
 use parking_lot::Mutex;
 use std::collections::VecDeque;
 use std::fmt::Write as _;
-use std::io::Write as _;
+use std::io::{Read as _, Seek as _, Write as _};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::OnceLock;
@@ -236,10 +236,27 @@ fn thread_stacks() -> String {
         ("eu-stack", vec!["-p", &pid]),
     ];
     for (tool, args) in tries {
-        if let Ok(out) = std::process::Command::new(tool).args(&args).output() {
-            if out.status.success() && !out.stdout.is_empty() {
-                return format!("({tool})\n{}", String::from_utf8_lossy(&out.stdout));
-            }
+        // The debugger stops every thread, this one included, so its output goes to a
+        // file: a pipe would fill up with nobody left to drain it, deadlocking both.
+        let Ok(mut file) = tempfile::tempfile() else {
+            continue;
+        };
+        let Ok(stdout) = file.try_clone() else {
+            continue;
+        };
+        let status = std::process::Command::new(tool)
+            .args(&args)
+            .stdin(std::process::Stdio::null())
+            .stdout(stdout)
+            .stderr(std::process::Stdio::null())
+            .status();
+        let mut out = String::new();
+        if status.is_ok_and(|s| s.success())
+            && file.seek(std::io::SeekFrom::Start(0)).is_ok()
+            && file.read_to_string(&mut out).is_ok()
+            && !out.is_empty()
+        {
+            return format!("({tool})\n{out}");
         }
     }
     "(install gdb or elfutils (eu-stack) for thread stacks)".into()
