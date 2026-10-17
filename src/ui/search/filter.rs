@@ -287,6 +287,10 @@ impl FluxApp {
                 .and_then(|m| m.downcast::<gtk::MultiSelection>().ok())
             {
                 model.unselect_all();
+                // A lone match is selected so Enter in the search entry opens it.
+                if model.n_items() == 1 {
+                    model.select_item(0, true);
+                }
             }
         });
         if !q.is_empty() {

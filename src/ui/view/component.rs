@@ -340,7 +340,7 @@ impl SimpleAsyncComponent for FluxApp {
                                                 glib::Propagation::Proceed
                                             }
                                         },
-                                        // Enter key triggers content search if it's a ':' query
+                                        // Enter triggers content search for a ':' query, otherwise opens the selection
                                         connect_activate[sender] => move |entry| {
                                             let raw_text = entry.text().to_string();
                                             if raw_text.starts_with(':') {
@@ -348,7 +348,7 @@ impl SimpleAsyncComponent for FluxApp {
                                                     sender.input(AppMsg::StartContentSearch(term, ext_filter));
                                                 }
                                             } else {
-                                                sender.input(AppMsg::UpdateFilter(raw_text));
+                                                sender.input(AppMsg::Activate);
                                             }
                                         },
                                         // Live search for standard filters (size, time, filenames)
