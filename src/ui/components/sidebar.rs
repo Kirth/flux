@@ -56,6 +56,8 @@ pub enum SidebarMsg {
     AddLink(PathBuf),
     /// Remove a shortcut link.
     RemoveLink(PathBuf),
+    /// Unmount (or eject, when the drive supports it) the device mounted at this path.
+    Eject(PathBuf),
 }
 
 /// A subfolder discovered while expanding a sidebar tree row.
@@ -136,6 +138,8 @@ pub struct SidebarPlaceInit {
     pub has_children: Option<bool>,
     /// A plain shortcut link (`[[quick_links]]`): navigates, never expands.
     pub is_link: bool,
+    /// Part of the "Devices" section (its header, volumes and mounts).
+    pub is_device: bool,
 }
 
 /// Simple model for a pinned sidebar location or one of its expanded subfolders.
@@ -152,6 +156,7 @@ pub struct SidebarPlace {
     pub expanded: bool,
     pub has_children: Option<bool>,
     pub is_link: bool,
+    pub is_device: bool,
     pub index: DynamicIndex,
 }
 
@@ -219,7 +224,7 @@ impl FactoryComponent for SidebarPlace {
 
             add_controller = gtk::GestureClick {
                 set_button: MOUSE_RIGHT_CLICK,
-                connect_pressed[sender, path = self.path.clone(), name = self.name.clone(), is_label = self.is_section_label, is_child = self.is_tree_child, is_link = self.is_link] => move |gesture, _, x, y| {
+                connect_pressed[sender, path = self.path.clone(), name = self.name.clone(), is_label = self.is_section_label, is_child = self.is_tree_child, is_link = self.is_link, is_device = self.is_device, is_mount = self.is_mount] => move |gesture, _, x, y| {
                     gesture.set_state(gtk::EventSequenceState::Claimed);
                     // The shortcut links' own header isn't a `[[sidebar]]` label: no
                     // rename/remove-section actions for it.
@@ -234,7 +239,17 @@ impl FactoryComponent for SidebarPlace {
                     let menu_model = gio::Menu::new();
                     let action_group = gio::SimpleActionGroup::new();
 
-                    if is_label {
+                    if is_device && !is_label && !is_mount {
+                        // Unmounted volume: its `device://` path mounts it on navigation.
+                        menu_model.append(Some(&tr("Mount")), Some("sidebar.mount"));
+                        let mount_action = gio::SimpleAction::new("mount", None);
+                        let sender_m = sender.clone();
+                        let path_m = path.clone();
+                        mount_action.connect_activate(move |_, _| {
+                            let _ = sender_m.output(SidebarMsg::Navigate(path_m.clone()));
+                        });
+                        action_group.add_action(&mount_action);
+                    } else if is_label {
                         menu_model.append(Some(&tr("Rename")), Some("sidebar.rename_section"));
                         menu_model.append(Some(&tr("Remove section")), Some("sidebar.remove_section"));
 
@@ -276,10 +291,21 @@ impl FactoryComponent for SidebarPlace {
                         menu_model.append(Some(&tr("Open in New Tab")), Some("sidebar.open_new_tab"));
                         menu_model.append(Some(&tr("Rename")), Some("sidebar.rename"));
                         menu_model.append(Some(&tr("Change icon")), Some("sidebar.change_icon"));
-                        menu_model.append(
-                            Some(&if is_link { tr("Remove from Shortcuts") } else { tr("Remove from sidebar") }),
-                            Some("sidebar.remove"),
-                        );
+                        if is_mount {
+                            menu_model.append(Some(&tr("Eject")), Some("sidebar.eject"));
+                            let eject_action = gio::SimpleAction::new("eject", None);
+                            let sender_ej = sender.clone();
+                            let path_ej = path.clone();
+                            eject_action.connect_activate(move |_, _| {
+                                let _ = sender_ej.output(SidebarMsg::Eject(path_ej.clone()));
+                            });
+                            action_group.add_action(&eject_action);
+                        } else {
+                            menu_model.append(
+                                Some(&if is_link { tr("Remove from Shortcuts") } else { tr("Remove from sidebar") }),
+                                Some("sidebar.remove"),
+                            );
+                        }
 
                         let open_tab_action = gio::SimpleAction::new("open_new_tab", None);
                         let sender_ot = sender.clone();
@@ -575,6 +601,7 @@ impl FactoryComponent for SidebarPlace {
             expanded: false,
             has_children: init.has_children,
             is_link: init.is_link,
+            is_device: init.is_device,
             index: index.clone(),
         }
     }

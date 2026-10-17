@@ -57,6 +57,7 @@ impl FluxApp {
                 crate::ui::SidebarMsg::Expand(index) => AppMsg::SidebarExpand(index),
                 crate::ui::SidebarMsg::AddLink(path) => AppMsg::AddQuickLink(path),
                 crate::ui::SidebarMsg::RemoveLink(path) => AppMsg::RemoveQuickLink(path),
+                crate::ui::SidebarMsg::Eject(path) => AppMsg::UnmountDevice(path),
                 crate::ui::SidebarMsg::Pin(path) => AppMsg::PinFolderAt {
                     path,
                     before: std::path::PathBuf::new(),

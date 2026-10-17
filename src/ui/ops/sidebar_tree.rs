@@ -189,6 +189,16 @@ impl FluxApp {
         let current = self.current_path.clone();
         let canonical = current.canonicalize().ok();
 
+        // Mount roots are real paths; resolving them would block the UI thread on a slow or
+        // hung filesystem (e.g. a FUSE driver still starting up right after a device mounts).
+        let resolve = |p: &crate::ui::SidebarPlace| {
+            if p.is_mount || p.is_device {
+                Some(p.path.clone())
+            } else {
+                p.path.canonicalize().ok()
+            }
+        };
+
         let is_dir_root = |p: &crate::ui::SidebarPlace| {
             p.depth == 0 && !p.is_section_label && !p.is_link && !is_virtual_sidebar_path(&p.path)
         };
@@ -200,7 +210,7 @@ impl FluxApp {
                 && (p.path == current
                     || canonical
                         .as_ref()
-                        .is_some_and(|c| p.path.canonicalize().ok().as_ref() == Some(c)))
+                        .is_some_and(|c| resolve(p).as_ref() == Some(c)))
         });
         let exact = root_match.or_else(|| self.sidebar.iter().position(|p| p.path == current));
         if exact.is_some() {
@@ -218,7 +228,7 @@ impl FluxApp {
             .iter()
             .enumerate()
             .filter(|(_, p)| is_dir_root(p))
-            .filter_map(|(i, p)| p.path.canonicalize().ok().map(|c| (i, c)))
+            .filter_map(|(i, p)| resolve(p).map(|c| (i, c)))
             .collect();
         let Some(root) =
             best_ancestor_root(roots.iter().map(|(i, p)| (*i, p.as_path())), &canonical)

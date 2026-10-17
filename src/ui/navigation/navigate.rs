@@ -22,6 +22,15 @@ impl FluxApp {
             return;
         }
 
+        // Unmounted devices in the sidebar mount on click and open once mounted.
+        if let Some(id) = path_str.strip_prefix(crate::services::devices::DEVICE_URI) {
+            sender.input(AppMsg::MountDevice {
+                id: id.to_string(),
+                new_tab: false,
+            });
+            return;
+        }
+
         // Intercept Search panel shortcut URI
         if path_str == "search://" || path_str == "search:///" {
             sender.input(AppMsg::ToggleSearchPanel);

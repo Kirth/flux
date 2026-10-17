@@ -1,7 +1,8 @@
-use crate::model::{AppMsg, FluxApp};
+use crate::model::{AppMsg, DeviceRename, FluxApp};
 use crate::ui::SidebarPlaceInit;
 use crate::utils;
 use adw::gio;
+use adw::glib;
 use adw::gio::prelude::*;
 use adw::prelude::*;
 use relm4::prelude::*;
@@ -34,73 +35,196 @@ impl FluxApp {
         self.refresh_sidebar();
     }
 
-    pub fn handle_system_mounts_ready(&mut self, mounts: Vec<(String, std::path::PathBuf)>) {
-        let mut guard = self.sidebar.guard();
+    /// Looks up the user's rename/icon override for a device row by path or name.
+    fn device_rename(&self, name: &str, path: &std::path::Path) -> Option<&DeviceRename> {
+        let renames = &self.config.ui.device_renames;
+        let path_str = path.to_string_lossy();
+        let trimmed_path = path_str.trim_end_matches('/');
+        let home_str = dirs::home_dir()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
 
-        // Mounts are always appended last, so drop the first mount root and everything after
-        // it (including any expanded subfolders), removing from the back for index stability.
-        let first_mount = (0..guard.len())
-            .find(|&i| guard.get(i).is_some_and(|p| p.is_mount && p.depth == 0))
-            .unwrap_or(guard.len());
-        while guard.len() > first_mount {
-            guard.pop_back();
+        renames
+            .get(path_str.as_ref())
+            .or_else(|| renames.get(trimmed_path))
+            .or_else(|| {
+                renames.iter().find_map(|(k, v)| {
+                    let expanded = if k.starts_with('~') {
+                        k.replace('~', &home_str)
+                    } else {
+                        k.clone()
+                    };
+                    let exp_trimmed = expanded.trim_end_matches('/');
+                    if exp_trimmed == trimmed_path || exp_trimmed == path_str || k == name {
+                        Some(v)
+                    } else {
+                        None
+                    }
+                })
+            })
+    }
+
+    /// Rebuilds the "Devices" section: GIO volumes (mounted or not), then any other mounts.
+    pub fn handle_system_mounts_ready(&mut self, mounts: Vec<(String, std::path::PathBuf)>) {
+        let volumes = crate::services::devices::list_volumes();
+
+        let mut rows = Vec::new();
+        for volume in &volumes {
+            let path = volume.sidebar_path();
+            let (name, icon) = match self.device_rename(&volume.name, &path) {
+                Some(rename) => (
+                    rename.name.clone(),
+                    rename.icon.clone().unwrap_or_else(|| volume.icon.clone()),
+                ),
+                None => (volume.name.clone(), volume.icon.clone()),
+            };
+            rows.push(SidebarPlaceInit {
+                name,
+                icon,
+                path,
+                is_mount: volume.mount_path.is_some(),
+                is_device: true,
+                ..Default::default()
+            });
         }
 
-        let home = dirs::home_dir().unwrap_or_default();
-        let home_str = home.to_string_lossy().to_string();
-
-        for (mut name, path) in mounts {
-            let path_str = path.to_string_lossy().to_string();
-            let trimmed_path = path_str.trim_end_matches('/');
-            let mut icon = "drive-harddisk-symbolic".to_string();
-
-            let rename_opt = self
-                .config
-                .ui
-                .device_renames
-                .get(&path_str)
-                .or_else(|| self.config.ui.device_renames.get(trimmed_path))
-                .or_else(|| {
-                    self.config.ui.device_renames.iter().find_map(|(k, v)| {
-                        let expanded = if k.starts_with('~') {
-                            k.replace('~', &home_str)
-                        } else {
-                            k.clone()
-                        };
-                        let exp_trimmed = expanded.trim_end_matches('/');
-                        if exp_trimmed == trimmed_path || exp_trimmed == path_str || k == &name {
-                            Some(v)
-                        } else {
-                            None
-                        }
-                    })
-                });
-
-            if let Some(rename) = rename_opt {
-                name = rename.name.clone();
-                if let Some(custom_icon) = &rename.icon {
-                    icon = custom_icon.clone();
-                }
-            } else if name.to_lowercase().contains("drive")
-                || name.to_lowercase().contains("cloud")
-                || path_str.contains("Gdrive")
-            {
-                icon = "folder-remote-symbolic".to_string();
+        for (name, path) in mounts {
+            if volumes.iter().any(|v| v.mount_path.as_ref() == Some(&path)) {
+                continue;
             }
-
-            guard.push_back(SidebarPlaceInit {
+            let path_str = path.to_string_lossy();
+            let (name, icon) = match self.device_rename(&name, &path) {
+                Some(rename) => (
+                    rename.name.clone(),
+                    rename
+                        .icon
+                        .clone()
+                        .unwrap_or_else(|| "drive-harddisk-symbolic".to_string()),
+                ),
+                None => {
+                    let icon = if name.to_lowercase().contains("drive")
+                        || name.to_lowercase().contains("cloud")
+                        || path_str.contains("Gdrive")
+                    {
+                        "folder-remote-symbolic"
+                    } else {
+                        "drive-harddisk-symbolic"
+                    };
+                    (name, icon.to_string())
+                }
+            };
+            rows.push(SidebarPlaceInit {
                 name,
                 icon,
                 path,
                 is_mount: true,
-                is_section_label: false,
+                is_device: true,
                 ..Default::default()
             });
         }
+
+        let mut guard = self.sidebar.guard();
+
+        // The devices section is always appended last, so drop its first row and everything
+        // after it (including any expanded subfolders), removing from the back for index stability.
+        let first_device = (0..guard.len())
+            .find(|&i| {
+                guard
+                    .get(i)
+                    .is_some_and(|p| p.is_device || (p.is_mount && p.depth == 0))
+            })
+            .unwrap_or(guard.len());
+        while guard.len() > first_device {
+            guard.pop_back();
+        }
+
+        if !rows.is_empty() {
+            // `is_link` keeps the rename/remove-section menu off this built-in header.
+            guard.push_back(SidebarPlaceInit {
+                name: crate::i18n::tr("Devices"),
+                is_section_label: true,
+                is_link: true,
+                is_device: true,
+                ..Default::default()
+            });
+        }
+        for row in rows {
+            guard.push_back(row);
+        }
         drop(guard);
 
-        self.restore_sidebar_expansion(first_mount);
+        self.restore_sidebar_expansion(first_device);
         self.sync_sidebar_selection();
+    }
+
+    /// Mounts the volume `id` (prompting for a passphrase if needed) and opens its root.
+    pub fn handle_mount_device(
+        &self,
+        id: String,
+        new_tab: bool,
+        sender: &AsyncComponentSender<Self>,
+    ) {
+        let Some(volume) = crate::services::devices::find_volume(&id) else {
+            sender.input(AppMsg::ShowToast(crate::i18n::tr("Device not found.")));
+            sender.input(AppMsg::RefreshSidebar);
+            return;
+        };
+
+        // A FUSE driver (e.g. fuse-exfat) can take a long time to answer its first request, and
+        // navigation touches the folder on the UI thread: wait for the root to list off-thread.
+        let open = move |sender: &AsyncComponentSender<Self>, root: PathBuf| {
+            let ready = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let ready_c = ready.clone();
+            let sender_c = sender.clone();
+            glib::timeout_add_local_once(std::time::Duration::from_secs(2), move || {
+                if !ready_c.load(std::sync::atomic::Ordering::Relaxed) {
+                    sender_c.input(AppMsg::ShowToast(crate::i18n::tr(
+                        "Waiting for the device to respond…",
+                    )));
+                }
+            });
+            let sender = sender.clone();
+            std::thread::spawn(move || {
+                let _ = std::fs::read_dir(&root).map(|mut entries| entries.next());
+                ready.store(true, std::sync::atomic::Ordering::Relaxed);
+                sender.input(if new_tab {
+                    AppMsg::NewTab(Some(root))
+                } else {
+                    AppMsg::Navigate(root)
+                });
+            });
+        };
+
+        if let Some(root) = volume.get_mount().and_then(|m| m.root().path()) {
+            open(sender, root);
+            return;
+        }
+
+        let window = self.toast_overlay.root().and_downcast::<gtk::Window>();
+        let op = gtk::MountOperation::new(window.as_ref());
+        let sender = sender.clone();
+        let volume_c = volume.clone();
+        volume.mount(
+            gio::MountMountFlags::NONE,
+            Some(&op),
+            gio::Cancellable::NONE,
+            move |res| match res {
+                Ok(()) => {
+                    match volume_c.get_mount().and_then(|m| m.root().path()) {
+                        Some(root) => open(&sender, root),
+                        None => sender.input(AppMsg::RefreshSidebar),
+                    }
+                }
+                // The user dismissed the passphrase prompt.
+                Err(e) if e.matches(gio::IOErrorEnum::FailedHandled) => {}
+                Err(e) => sender.input(AppMsg::ShowToast(format!(
+                    "{}: {}",
+                    crate::i18n::tr("Mount failed"),
+                    e.message()
+                ))),
+            },
+        );
     }
 
     /// Adds `path` to the plain shortcut links at the top of the sidebar.
@@ -372,21 +496,69 @@ impl FluxApp {
         }
     }
 
-    /// Unmounts a mounted storage volume or external drive.
+    /// Ejects a removable drive, or unmounts the volume at `path` when it can't be ejected.
     pub fn handle_unmount_device(&self, path: PathBuf, sender: &AsyncComponentSender<Self>) {
-        let sender = sender.clone();
         let file = gio::File::for_path(&path);
+        let mount = match file.find_enclosing_mount(gio::Cancellable::NONE) {
+            Ok(mount) => mount,
+            Err(e) => {
+                sender.input(AppMsg::ShowToast(format!(
+                    "{}: {}",
+                    crate::i18n::tr("Unmount failed"),
+                    e.message()
+                )));
+                return;
+            }
+        };
 
-        if let Ok(mount) = file.find_enclosing_mount(gio::Cancellable::NONE) {
-            mount.unmount_with_operation(
-                gio::MountUnmountFlags::NONE,
-                gio::MountOperation::NONE,
-                gio::Cancellable::NONE,
-                move |res| match res {
-                    Ok(_) => sender.input(AppMsg::RefreshSidebar),
-                    Err(e) => sender.input(AppMsg::ShowToast(format!("Unmount failed: {}", e))),
-                },
-            );
+        // The process working directory follows the current folder, which would keep the
+        // filesystem busy: step out of it first and give navigation a moment to settle.
+        let inside = mount
+            .root()
+            .path()
+            .is_some_and(|root| self.current_path.starts_with(root));
+        if inside {
+            sender.input(AppMsg::Navigate(dirs::home_dir().unwrap_or_default()));
+        }
+
+        let sender = sender.clone();
+        let run = move || {
+            let eject = mount.can_eject();
+            let sender_c = sender.clone();
+            let done = move |res: Result<(), glib::Error>| match res {
+                Ok(()) => sender_c.input(AppMsg::RefreshSidebar),
+                Err(e) if e.matches(gio::IOErrorEnum::FailedHandled) => {}
+                Err(e) => sender_c.input(AppMsg::ShowToast(format!(
+                    "{}: {}",
+                    if eject {
+                        crate::i18n::tr("Eject failed")
+                    } else {
+                        crate::i18n::tr("Unmount failed")
+                    },
+                    e.message()
+                ))),
+            };
+            if eject {
+                mount.eject_with_operation(
+                    gio::MountUnmountFlags::NONE,
+                    gio::MountOperation::NONE,
+                    gio::Cancellable::NONE,
+                    done,
+                );
+            } else {
+                mount.unmount_with_operation(
+                    gio::MountUnmountFlags::NONE,
+                    gio::MountOperation::NONE,
+                    gio::Cancellable::NONE,
+                    done,
+                );
+            }
+        };
+
+        if inside {
+            glib::timeout_add_local_once(std::time::Duration::from_millis(150), run);
+        } else {
+            run();
         }
     }
 

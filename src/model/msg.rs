@@ -820,6 +820,10 @@ pub enum AppMsg {
     },
     /// Triggers the asynchronous unmounting of a system drive or mounted volume.
     UnmountDevice(std::path::PathBuf),
+    /// The status bar's free-space figure was re-measured; only triggers a view update.
+    FreeSpaceReady,
+    /// Mounts the GIO volume with this id, then opens it (in a new tab when `new_tab`).
+    MountDevice { id: String, new_tab: bool },
     /// Pause a paste operation and ask the user whether to replace conflicting directories.
     ///
     /// Carries the full original file list so it can be resumed via `PerformPasteForced`

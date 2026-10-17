@@ -19,6 +19,8 @@ pub(super) fn handle(
         AppMsg::RefreshNetworkSidebar => app.handle_refresh_network_sidebar(sender),
         AppMsg::SystemMountsReady(mounts) => app.handle_system_mounts_ready(mounts),
         AppMsg::UnmountDevice(path) => app.handle_unmount_device(path, sender),
+        AppMsg::FreeSpaceReady => {}
+        AppMsg::MountDevice { id, new_tab } => app.handle_mount_device(id, new_tab, sender),
         AppMsg::UnlockLuksImage { path } => app.show_luks_passphrase_dialog(path, sender),
         AppMsg::LuksMounted { mount_point, .. } => {
             sender.input(AppMsg::Navigate(mount_point));

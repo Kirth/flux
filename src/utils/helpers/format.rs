@@ -4,7 +4,9 @@ use crate::i18n::tr;
 use relm4::prelude::*;
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 /// Computes the right-side status string containing active filters and free volume space.
 pub fn format_right_status(current_path: &Path, extension_filter: Option<&[String]>) -> String {
@@ -16,22 +18,78 @@ pub fn format_right_status(current_path: &Path, extension_filter: Option<&[Strin
         }
     }
 
-    if current_path.is_absolute() && current_path.exists() {
-        if let Ok(c_path) = CString::new(current_path.as_os_str().as_bytes()) {
-            let mut stat = std::mem::MaybeUninit::<libc::statvfs>::uninit();
-            if unsafe { libc::statvfs(c_path.as_ptr(), stat.as_mut_ptr()) } == 0 {
-                let stat = unsafe { stat.assume_init() };
-                let free_bytes = (stat.f_bsize) * (stat.f_bavail);
-                parts.push(format!(
-                    "{} {}",
-                    gtk::glib::format_size(free_bytes),
-                    tr("free")
-                ));
-            }
+    if current_path.is_absolute() {
+        if let Some(free_bytes) = free_space(current_path) {
+            parts.push(format!(
+                "{} {}",
+                gtk::glib::format_size(free_bytes),
+                tr("free")
+            ));
         }
     }
 
     parts.join(" · ")
+}
+
+struct FreeSpace {
+    path: PathBuf,
+    bytes: Option<u64>,
+    checked: Option<Instant>,
+    in_flight: Option<PathBuf>,
+}
+
+static FREE_SPACE: Mutex<FreeSpace> = Mutex::new(FreeSpace {
+    path: PathBuf::new(),
+    bytes: None,
+    checked: None,
+    in_flight: None,
+});
+
+/// Free space on the volume holding `path`, as last measured off the UI thread.
+///
+/// This runs on every view update, and `statvfs` blocks for as long as the filesystem does
+/// (a FUSE driver busy with thumbnail reads, a hung network mount), so it is measured on a
+/// worker thread every few seconds and the cached value is shown meanwhile.
+fn free_space(path: &Path) -> Option<u64> {
+    const REFRESH: Duration = Duration::from_secs(5);
+
+    let mut cache = FREE_SPACE.lock().unwrap_or_else(|e| e.into_inner());
+    if cache.path != path {
+        cache.path = path.to_path_buf();
+        cache.bytes = None;
+        cache.checked = None;
+    }
+    let stale = cache.checked.is_none_or(|t| t.elapsed() > REFRESH);
+    if stale && cache.in_flight.as_deref() != Some(path) {
+        cache.in_flight = Some(path.to_path_buf());
+        let path = path.to_path_buf();
+        std::thread::spawn(move || {
+            let bytes = statvfs_free(&path);
+            let mut cache = FREE_SPACE.lock().unwrap_or_else(|e| e.into_inner());
+            if cache.in_flight.as_ref() == Some(&path) {
+                cache.in_flight = None;
+            }
+            if cache.path == path {
+                cache.bytes = bytes;
+                cache.checked = Some(Instant::now());
+                drop(cache);
+                if let Some(sender) = crate::model::SENDER.get() {
+                    let _ = sender.send(crate::model::AppMsg::FreeSpaceReady);
+                }
+            }
+        });
+    }
+    cache.bytes
+}
+
+fn statvfs_free(path: &Path) -> Option<u64> {
+    let c_path = CString::new(path.as_os_str().as_bytes()).ok()?;
+    let mut stat = std::mem::MaybeUninit::<libc::statvfs>::uninit();
+    if unsafe { libc::statvfs(c_path.as_ptr(), stat.as_mut_ptr()) } != 0 {
+        return None;
+    }
+    let stat = unsafe { stat.assume_init() };
+    Some(stat.f_bsize * stat.f_bavail)
 }
 
 /// Checks if a paste operation is recursive (pasting a folder into itself or a subfolder).

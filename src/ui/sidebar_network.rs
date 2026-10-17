@@ -97,4 +97,20 @@ pub fn connect_volume_monitor_signals(sender: Sender<AppMsg>) {
     monitor.connect_mount_changed(move |_, _| {
         let _ = s.send(AppMsg::RefreshNetworkSidebar);
     });
+
+    // Plugged/unplugged drives appear as volumes before (or without) being mounted.
+    let s = sender.clone();
+    monitor.connect_volume_added(move |_, _| {
+        let _ = s.send(AppMsg::RefreshSidebar);
+    });
+
+    let s = sender.clone();
+    monitor.connect_volume_removed(move |_, _| {
+        let _ = s.send(AppMsg::RefreshSidebar);
+    });
+
+    let s = sender.clone();
+    monitor.connect_volume_changed(move |_, _| {
+        let _ = s.send(AppMsg::RefreshSidebar);
+    });
 }

@@ -11,6 +11,16 @@ impl FluxApp {
         sender: &AsyncComponentSender<Self>,
     ) {
         let path = target_path.unwrap_or_else(|| self.current_path.clone());
+        if let Some(id) = path
+            .to_string_lossy()
+            .strip_prefix(crate::services::devices::DEVICE_URI)
+        {
+            sender.input(AppMsg::MountDevice {
+                id: id.to_string(),
+                new_tab: true,
+            });
+            return;
+        }
         self.open_tab_in_pane(self.active_pane(), path, sender);
     }
 

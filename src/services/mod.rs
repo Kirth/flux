@@ -1,5 +1,6 @@
 pub mod archive;
 pub mod db;
+pub mod devices;
 pub mod git;
 pub mod inspector;
 pub mod loader;
