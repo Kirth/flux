@@ -55,7 +55,7 @@ impl FluxApp {
         let end = (start + MAX_FILES).min(paths.len());
         let start = end.saturating_sub(MAX_FILES);
 
-        let mut argv: Vec<OsString> = vec!["flux-preview".into(), "--index".into()];
+        let mut argv: Vec<OsString> = vec![previewer(), "--index".into()];
         argv.push((index - start).to_string().into());
         argv.extend(paths[start..end].iter().map(|p| p.as_os_str().to_owned()));
         let argv: Vec<&std::ffi::OsStr> = argv.iter().map(|a| a.as_os_str()).collect();
@@ -68,4 +68,23 @@ impl FluxApp {
             )));
         }
     }
+}
+
+/// The previewer to run: `flux-preview` from PATH. Non-release builds honor
+/// `FLUX_PREVIEW_DEV` to test a dev build instead: `1` picks the release build in the
+/// sibling `flux-preview` checkout, any other value is taken as the binary's path.
+fn previewer() -> OsString {
+    #[cfg(debug_assertions)]
+    if let Some(dev) = std::env::var_os("FLUX_PREVIEW_DEV").filter(|v| !v.is_empty() && v != "0") {
+        return if dev == "1" {
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../flux-preview/target/release/flux-preview"
+            )
+            .into()
+        } else {
+            dev
+        };
+    }
+    "flux-preview".into()
 }
